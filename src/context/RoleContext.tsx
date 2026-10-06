@@ -114,71 +114,70 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     let unsubscribe: (() => void) | undefined;
 
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const initialize = async () => {
-        try {
-          if (process.env.NODE_ENV === 'development') {
-            const demoResponse = await fetch('/api/demo/session', { cache: 'no-store' });
-            const demoResult = await demoResponse.json();
-            if (!demoResponse.ok) throw new Error(demoResult.error ?? 'Unable to load the demo session.');
-            const demoSession = demoResult.session as { email: string; role: UserRole } | null;
-            if (active && demoSession) {
-              let savedProfile: Partial<SessionProfile> = {};
-              try {
-                const saved = window.localStorage.getItem(`gardenia-demo:profile:${demoSession.email}`);
-                if (saved) savedProfile = JSON.parse(saved) as Partial<SessionProfile>;
-              } catch (storageError) {
-                throw new Error(`Demo profile could not be restored: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
-              }
-              setCurrentUser({
-                id: `demo:${demoSession.email}`,
-                name: savedProfile.name ?? demoSession.email.split('@')[0],
-                email: demoSession.email,
-                role: demoSession.role,
-                avatar: savedProfile.avatar ?? '',
-                institution: savedProfile.institution ?? '',
-                bio: savedProfile.bio ?? 'Demo preview account. Actions do not change protected database records.',
-              });
-              setError(null);
-              setLoading(false);
-              return;
+    const initialize = async () => {
+      try {
+        if (process.env.NODE_ENV === 'development') {
+          const demoResponse = await fetch('/api/demo/session', { cache: 'no-store' });
+          const demoResult = await demoResponse.json();
+          if (!demoResponse.ok) throw new Error(demoResult.error ?? 'Unable to load the demo session.');
+          const demoSession = demoResult.session as { email: string; role: UserRole } | null;
+          if (active && demoSession) {
+            let savedProfile: Partial<SessionProfile> = {};
+            try {
+              const saved = window.localStorage.getItem(`gardenia-demo:profile:${demoSession.email}`);
+              if (saved) savedProfile = JSON.parse(saved) as Partial<SessionProfile>;
+            } catch (storageError) {
+              throw new Error(`Demo profile could not be restored: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
             }
-          }
-          const { data, error: authError } = await supabase.auth.getUser();
-          if (authError && authError.name !== 'AuthSessionMissingError') {
-            throw new Error(`Unable to validate your session: ${authError.message}`);
-          }
-          if (active) await loadProfile(data.user ? { id: data.user.id, email: data.user.email } : null);
-        } catch (initializationError) {
-          if (active) {
-            setError(initializationError instanceof Error ? initializationError.message : 'Unable to load your account.');
+            const demoNameByRole: Record<UserRole, string> = {
+              STUDENT: 'Sharath Swaroop',
+              RESEARCHER: 'Dr. Ananya Rao',
+              MENTOR: 'Prof. Sharma',
+              SPONSOR: 'MedScan Labs',
+              ADMIN: 'Gardenia Admin',
+            };
+            setCurrentUser({
+              id: `demo:${demoSession.email}`,
+              name: savedProfile.name ?? (demoSession.email.split('@')[0].toLowerCase() === 'demo'
+                ? demoNameByRole[demoSession.role]
+                : demoSession.email.split('@')[0]),
+              email: demoSession.email,
+              role: demoSession.role,
+              avatar: savedProfile.avatar ?? '',
+              institution: savedProfile.institution ?? '',
+              bio: savedProfile.bio ?? 'Demo preview account. Actions do not change protected database records.',
+            });
+            setError(null);
             setLoading(false);
+            return;
           }
         }
-      };
-      void initialize();
-      const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-        window.setTimeout(async () => {
-          if (!active) return;
-          if (process.env.NODE_ENV === 'development' && !session?.user) {
-            const response = await fetch('/api/demo/session', { cache: 'no-store' });
-            const result = await response.json();
-            if (!response.ok) {
-              setError(result.error ?? 'Unable to validate the demo session.');
-              setLoading(false);
-              return;
-            }
-            if (result.session) return;
-          }
-          await loadProfile(session?.user ? { id: session.user.id, email: session.user.email } : null);
-        }, 0);
-      });
-      unsubscribe = () => listener.subscription.unsubscribe();
-    } catch (initializationError) {
-      setError(initializationError instanceof Error ? initializationError.message : 'Unable to load your account.');
-      setLoading(false);
-    }
+
+        if (!active) return;
+        const supabase = createSupabaseBrowserClient();
+        const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+          window.setTimeout(() => {
+            if (active) void loadProfile(session?.user ? { id: session.user.id, email: session.user.email } : null);
+          }, 0);
+        });
+        unsubscribe = () => listener.subscription.unsubscribe();
+        if (!active) {
+          unsubscribe();
+          return;
+        }
+        const { data, error: authError } = await supabase.auth.getUser();
+        if (authError && authError.name !== 'AuthSessionMissingError') {
+          throw new Error(`Unable to validate your session: ${authError.message}`);
+        }
+        if (active) await loadProfile(data.user ? { id: data.user.id, email: data.user.email } : null);
+      } catch (initializationError) {
+        if (active) {
+          setError(initializationError instanceof Error ? initializationError.message : 'Unable to load your account.');
+          setLoading(false);
+        }
+      }
+    };
+    void initialize();
 
     return () => {
       active = false;

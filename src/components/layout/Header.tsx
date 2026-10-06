@@ -18,7 +18,7 @@ type HeaderProps = {
 export function Header({ dark, onToggleTheme }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentRole, currentUser, isDemo, signOut, switchDemoRole, notify } = useRole();
+  const { currentRole, currentUser, isDemo, loading, signOut, switchDemoRole, notify } = useRole();
   const inputRef = useRef<HTMLInputElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
@@ -34,11 +34,12 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
   const displayName = currentUser.name || `${workspaceRole.toLowerCase()} account`;
 
   useEffect(() => {
+    if (loading) return;
     let active = true;
     const loadUnread = async () => {
       if (isDemo) {
         try {
-          const saved = window.localStorage.getItem('gardenia-demo:notification-read');
+          const saved = window.localStorage.getItem(`gardenia-demo:v1:${currentUser.email || 'anonymous'}:notification-read`);
           const readItems = saved ? JSON.parse(saved) as string[] : [];
           setUnreadCount(demoNotifications.filter((item) => !readItems.includes(item.title)).length);
           setNotificationError(false);
@@ -65,7 +66,7 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
       active = false;
       window.removeEventListener('gardenia:notifications-updated', loadUnread);
     };
-  }, [pathname, workspaceRole, isDemo]);
+  }, [pathname, workspaceRole, isDemo, loading, currentUser.email]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -212,9 +213,9 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
         {isDemo && (
-          <span className="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 sm:inline-flex">
-            Demo Mode · Local changes
-          </span>
+          <button type="button" onClick={() => void signOutToLogin()} aria-label="Exit Demo Mode" title="Demo Mode · click to exit; actions are saved in this browser only" className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[9px] font-bold text-amber-300 hover:bg-amber-500/20 sm:px-2.5 sm:text-[10px]">
+            Demo Mode<span className="hidden md:inline"> · Exit</span>
+          </button>
         )}
         <button
           type="button"

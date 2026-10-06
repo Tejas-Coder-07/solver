@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Activity,
   ArrowDownRight,
@@ -89,6 +89,7 @@ const projectSections = [
 
 const titleCase = (value: string) => pageTitles[value] ?? value.split('-').map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ');
 const projectPath = (id: string, section = 'overview') => `/projects/${id}/${section}`;
+type MentorshipRequest = { id: string; studentName: string; email: string; mentor: string; status: 'Pending' | 'Approved' | 'Rejected' };
 
 function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) {
   return (
@@ -113,6 +114,7 @@ function Dashboard({ role }: { role: UserRole }) {
   const [applications, setApplications] = useState(12);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [mentorDecisions, setMentorDecisions] = useDemoState<Record<string, string>>('mentor-dashboard-decisions', {});
+  const [mentorshipRequests, setMentorshipRequests] = useDemoState<MentorshipRequest[]>('mentorship-requests', []);
   const stats = student
     ? [
         { label: 'Active Projects', value: '2', detail: 'You are collaborating on', icon: FolderKanban, tone: 'violet' },
@@ -149,6 +151,24 @@ function Dashboard({ role }: { role: UserRole }) {
             ];
 
   const leftPanel = student || researcher ? 'Active Projects' : sponsor ? 'Sponsored Projects' : mentor ? 'Pending Approvals' : 'Verification Queue';
+  const statDestinations: Record<string, string> = {
+    'Active Projects': `/${role.toLowerCase()}/projects`,
+    'Pending Tasks': '/student/my-work',
+    'Access Requests': `/${role.toLowerCase()}/access-requests`,
+    'Skill Verifications': '/student/skills',
+    Applications: '/researcher/applications',
+    Publications: '/researcher/contributions',
+    'Pending Approvals': '/mentor/queue',
+    Contributors: '/mentor/students',
+    'Credits Earned': '/mentor/credits',
+    'Sponsored Projects': '/sponsor/projects',
+    'Research Problems': '/sponsor/research-problems',
+    'Pending Requests': '/sponsor/access-requests',
+    'Active Teams': '/sponsor/researchers',
+    'Total Users': '/admin/users',
+    'Pending Verifications': '/admin/verification',
+    Organizations: '/admin/organizations',
+  };
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
@@ -160,7 +180,7 @@ function Dashboard({ role }: { role: UserRole }) {
       />
 
       <section aria-label={`${roleName(role)} summary`} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat, index) => <StatCard key={stat.label} {...stat} href={student && index === 0 ? '/student/projects' : undefined} />)}
+        {stats.map((stat) => <StatCard key={stat.label} {...stat} href={statDestinations[stat.label]} />)}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.95fr)]">
@@ -173,11 +193,17 @@ function Dashboard({ role }: { role: UserRole }) {
             </div>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {demoPeople.slice(0, 3).map((personItem, index) => (
-                <li key={personItem.name} className="flex items-center gap-2.5 py-2.5">
+              {(mentor && mentorshipRequests.some((request) => request.status === 'Pending')
+                ? mentorshipRequests.filter((request) => request.status === 'Pending').map((request) => ({
+                    name: request.studentName,
+                    role: `Mentorship request · ${request.mentor}`,
+                    requestId: request.id,
+                  }))
+                : demoPeople.slice(0, 3).map((personItem) => ({ name: personItem.name, role: personItem.role, requestId: null }))).map((personItem, index) => (
+                <li key={personItem.requestId ?? personItem.name} className="flex items-center gap-2.5 py-2.5">
                   <UserAvatar name={personItem.name} tone={['rose', 'blue', 'amber'][index]} />
                   <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold text-slate-800">{admin ? ['MedScan Labs (Company)', 'Northstar Research', 'Dr. K. Mehta'][index] : personItem.name}</p><p className="truncate text-[9px] text-slate-500">{admin ? 'Organization verification' : personItem.role}</p></div>
-                  {admin ? <Link href="/admin/verification" className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">Review queue</Link> : <div className="flex items-center gap-1">{mentorDecisions[personItem.name] ? <StatusBadge tone={mentorDecisions[personItem.name] === 'Approved' ? 'emerald' : 'rose'}>{mentorDecisions[personItem.name]}</StatusBadge> : <><MockAction tone="neutral" onClick={() => setSelectedPerson(personItem.name)}>View</MockAction><MockAction onClick={() => { if (!window.confirm(`Approve ${personItem.name}'s request?`)) return; setMentorDecisions((current) => ({ ...current, [personItem.name]: 'Approved' })); setApplications((count) => Math.max(0, count - 1)); }}>Approve</MockAction></>}</div>}
+                  {admin ? <Link href="/admin/verification" className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">Review queue</Link> : <div className="flex items-center gap-1">{mentorDecisions[personItem.name] ? <StatusBadge tone={mentorDecisions[personItem.name] === 'Approved' ? 'emerald' : 'rose'}>{mentorDecisions[personItem.name]}</StatusBadge> : <><MockAction tone="neutral" onClick={() => setSelectedPerson(personItem.name)}>View</MockAction><MockAction tone="neutral" onClick={() => { if (!window.confirm(`Reject ${personItem.name}'s request?`)) return; if (personItem.requestId) setMentorshipRequests((items) => items.map((item) => item.id === personItem.requestId ? { ...item, status: 'Rejected' } : item)); else setMentorDecisions((current) => ({ ...current, [personItem.name]: 'Rejected' })); setApplications((count) => Math.max(0, count - 1)); }}>Reject</MockAction><MockAction onClick={() => { if (!window.confirm(`Approve ${personItem.name}'s request?`)) return; if (personItem.requestId) setMentorshipRequests((items) => items.map((item) => item.id === personItem.requestId ? { ...item, status: 'Approved' } : item)); else setMentorDecisions((current) => ({ ...current, [personItem.name]: 'Approved' })); setApplications((count) => Math.max(0, count - 1)); }}>Approve</MockAction></>}</div>}
                 </li>
               ))}
             </ul>
@@ -185,7 +211,7 @@ function Dashboard({ role }: { role: UserRole }) {
           {selectedPerson && <div role="dialog" aria-label="Request details" className="mt-3 flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-[10px] text-indigo-900"><span>Sample request details for {selectedPerson}: awaiting mentor review.</span><button type="button" onClick={() => setSelectedPerson(null)} className="font-semibold underline">Close</button></div>}
           {mentor && <div className="mt-3 text-right"><StatusBadge tone="amber">{applications} pending approvals</StatusBadge></div>}
         </Panel>
-        <Panel title={student ? 'Notifications' : admin ? 'Recent Audit Activity' : mentor ? 'Recent Reviews' : sponsor ? 'Recent Applications' : 'Recent Research Activity'} action={<TextLink href={student ? '/student/messages' : `/${role.toLowerCase()}/messages`}>View all</TextLink>}>
+        <Panel title={student ? 'Notifications' : admin ? 'Recent Audit Activity' : mentor ? 'Recent Reviews' : sponsor ? 'Recent Applications' : 'Recent Research Activity'} action={<TextLink href={student ? '/student/notifications' : `/${role.toLowerCase()}/messages`}>View all</TextLink>}>
           <NotificationPanel items={demoNotifications.slice(0, 4)} />
         </Panel>
       </section>
@@ -225,11 +251,15 @@ function StudentDashboard() {
           <h1 className="text-balance mt-1 text-xl font-extrabold text-slate-950 sm:text-2xl">Good morning, Sharath 👋</h1>
           <p className="text-pretty mt-1 text-[11px] text-slate-600">Continue making an impact in real research.</p>
         </div>
-        <Link href="/student/credits" className="min-w-32 rounded-xl border border-slate-200 bg-white px-4 py-2 text-right shadow-sm">
-          <span className="block text-[9px] text-slate-500">Current Credits</span>
-          <span className="text-base font-extrabold tabular-nums text-slate-950">420</span>
-          <span className="ml-2 text-[9px] font-semibold text-emerald-700">Top 12% ↑</span>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/student/projects" className="rounded-lg bg-indigo-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-indigo-700">Explore Projects</Link>
+          <Link href="/student/my-work" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50">View My Tasks</Link>
+          <Link href="/student/credits" className="min-w-32 rounded-xl border border-slate-200 bg-white px-4 py-2 text-right shadow-sm">
+            <span className="block text-[9px] text-slate-500">Current Credits</span>
+            <span className="text-base font-extrabold tabular-nums text-slate-950">420</span>
+            <span className="ml-2 text-[9px] font-semibold text-emerald-700">Top 12% ↑</span>
+          </Link>
+        </div>
       </header>
 
       <section aria-label="Student dashboard summary" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -245,7 +275,7 @@ function StudentDashboard() {
             {projects.map((project) => <ProjectCard key={project.id} project={project} href={projectPath(project.id)} />)}
           </div>
         </Panel>
-        <Panel title="Recent Notifications" action={<TextLink href="/student/messages">View all</TextLink>}>
+        <Panel title="Recent Notifications" action={<TextLink href="/student/notifications">View all</TextLink>}>
           <NotificationPanel items={demoNotifications.slice(0, 4)} />
         </Panel>
       </section>
@@ -267,17 +297,34 @@ function StudentDashboard() {
 
 function ProjectListing({ role }: { role: UserRole }) {
   const [query, setQuery] = useState('');
-  const [published, setPublished] = useState(false);
+  const [showPublishForm, setShowPublishForm] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newSummary, setNewSummary] = useState('');
+  const [publishNotice, setPublishNotice] = useState('');
+  const [newProjects, setNewProjects] = useDemoState<{ id: string; title: string; summary: string }[]>('sponsor-project-drafts', []);
   const projects = demoProjects.filter((project) => `${project.title} ${project.domain} ${project.sponsor}`.toLowerCase().includes(query.toLowerCase()));
+  const publishProject = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = newTitle.trim();
+    const summary = newSummary.trim();
+    if (!title || !summary) return;
+    setNewProjects((items) => [{ id: `draft-${Date.now()}`, title, summary }, ...items]);
+    setPublishNotice(`“${title}” was saved as a demo research opportunity.`);
+    setNewTitle('');
+    setNewSummary('');
+    setShowPublishForm(false);
+  };
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <PageIntro eyebrow={roleName(role)} title={role === 'SPONSOR' ? 'Your research projects' : 'Explore research projects'} description="Discover collaborative research with clear goals, shared evidence, and teams built to make an impact." action={role === 'SPONSOR' && <MockAction onClick={() => setPublished(true)}><Plus className="mr-1 inline size-3" /> Publish research problem</MockAction>} />
-      {published && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">Your research problem draft is ready. In this frontend demo it has not been sent to a server.</div>}
+      <PageIntro eyebrow={roleName(role)} title={role === 'SPONSOR' ? 'Your research projects' : 'Explore research projects'} description="Discover collaborative research with clear goals, shared evidence, and teams built to make an impact." action={role === 'SPONSOR' && <MockAction onClick={() => setShowPublishForm((show) => !show)}><Plus className="mr-1 inline size-3" /> {showPublishForm ? 'Close form' : 'Publish research problem'}</MockAction>} />
+      {publishNotice && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">{publishNotice}</div>}
+      {showPublishForm && role === 'SPONSOR' && <form onSubmit={publishProject} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><label className="text-[10px] font-semibold text-slate-700">Research title<input required value={newTitle} onChange={(event) => setNewTitle(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><label className="text-[10px] font-semibold text-slate-700">Public summary<textarea required value={newSummary} onChange={(event) => setNewSummary(event.target.value)} className="mt-1 block min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><button type="submit" className="w-fit rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white">Save demo opportunity</button></form>}
       <label className="flex max-w-lg items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm"><Search className="size-4 text-slate-400" aria-hidden="true" /><span className="sr-only">Search projects</span><input className="w-full text-xs outline-none placeholder:text-slate-400" placeholder="Search projects, research areas, sponsors..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {projects.map((project) => <ProjectCard key={project.id} project={project} href={projectPath(project.id)} />)}
+        {newProjects.filter((project) => `${project.title} ${project.summary}`.toLowerCase().includes(query.toLowerCase())).map((project) => <article key={project.id} className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><StatusBadge tone="emerald">Demo draft</StatusBadge><h2 className="mt-3 text-sm font-bold text-slate-900">{project.title}</h2><p className="mt-2 text-xs leading-5 text-slate-600">{project.summary}</p><p className="mt-3 text-[9px] text-slate-500">This opportunity is saved locally and is not publicly submitted.</p></article>)}
       </div>
-      {projects.length === 0 && <EmptyState title="No matching projects" description="Try a broader term such as climate, medical imaging, or materials." action={<MockAction tone="neutral" onClick={() => setQuery('')}>Clear search</MockAction>} />}
+      {projects.length === 0 && newProjects.length === 0 && <EmptyState title="No matching projects" description="Try a broader term such as climate, medical imaging, or materials." action={<MockAction tone="neutral" onClick={() => setQuery('')}>Clear search</MockAction>} />}
     </div>
   );
 }
@@ -487,10 +534,49 @@ function StudentAccess() {
   );
 }
 
+function MentorFeedbackPage() {
+  const { currentUser } = useRole();
+  const [replies, setReplies] = useDemoState<Record<string, string>>('mentor-feedback-replies', {});
+  const [mentorRequests, setMentorRequests] = useDemoState<MentorshipRequest[]>('mentorship-requests', []);
+  const [selectedMentor, setSelectedMentor] = useState(demoPeople.find((person) => person.role === 'Mentor')?.name ?? demoPeople[0].name);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [notice, setNotice] = useState('');
+  const currentRequest = mentorRequests.find((request) => request.email === currentUser.email && request.mentor === selectedMentor);
+  const feedback = [
+    { id: 'feedback-python', mentor: 'Prof. Sharma', skill: 'Python', text: 'Your data pipeline is well structured. Add a brief note explaining how you handled missing values.' },
+    { id: 'feedback-research', mentor: 'Dr. Ananya Rao', skill: 'Research practice', text: 'The latest literature review is thorough. Please cite the cohort selection criteria in the next revision.' },
+  ];
+  const requestMentor = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (currentRequest && currentRequest.status === 'Pending') {
+      setNotice(`Your request to ${selectedMentor} is already pending.`);
+      return;
+    }
+    setMentorRequests((items) => [...items.filter((item) => !(item.email === currentUser.email && item.mentor === selectedMentor)), {
+      id: `mentor-request-${Date.now()}`,
+      studentName: currentUser.name === 'demo' ? 'Sharath Swaroop' : currentUser.name,
+      email: currentUser.email,
+      mentor: selectedMentor,
+      status: 'Pending',
+    }]);
+    setNotice(`Mentorship request sent to ${selectedMentor}.`);
+  };
+  const saveReply = (event: React.FormEvent<HTMLFormElement>, feedbackId: string) => {
+    event.preventDefault();
+    const text = replyDraft.trim();
+    if (!text) return;
+    setReplies((current) => ({ ...current, [feedbackId]: text }));
+    setReplyDraft('');
+    setNotice('Your reply was saved locally.');
+  };
+  return <div className="mx-auto max-w-[1000px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow="Student workspace" title="Mentor Feedback" description="Reply to mentor feedback or request mentorship. Demo requests and replies are stored in this browser." />{notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p>}<Panel title="Request a mentor"><form onSubmit={requestMentor} className="flex flex-wrap items-end gap-2"><label className="min-w-56 flex-1 text-[10px] font-semibold text-slate-700">Choose a mentor<select value={selectedMentor} onChange={(event) => setSelectedMentor(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">{demoPeople.filter((person) => person.role === 'Mentor' || person.role === 'Research lead').map((person) => <option key={person.name}>{person.name}</option>)}</select></label><button disabled={currentRequest?.status === 'Pending' || currentRequest?.status === 'Approved'} type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white disabled:bg-slate-300">{currentRequest?.status === 'Pending' ? 'Request pending' : currentRequest?.status === 'Approved' ? 'Mentorship approved' : currentRequest?.status === 'Rejected' ? 'Request again' : 'Request mentorship'}</button></form>{currentRequest && <p className="mt-2 text-[9px] text-slate-500">Your request status: {currentRequest.status}</p>}</Panel><Panel title="Feedback and replies"><div className="space-y-3">{feedback.map((item) => <article key={item.id} className="rounded-lg border border-slate-100 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold text-slate-900">{item.mentor} · {item.skill}</p><StatusBadge tone="blue">Feedback</StatusBadge></div><p className="mt-2 text-[10px] leading-5 text-slate-600">{item.text}</p>{replies[item.id] ? <p className="mt-3 rounded-lg bg-indigo-50 p-2 text-[10px] text-indigo-900">Your reply: {replies[item.id]}</p> : <form onSubmit={(event) => saveReply(event, item.id)} className="mt-3 flex gap-2"><label className="sr-only" htmlFor={`feedback-reply-${item.id}`}>Reply to {item.mentor}</label><input id={`feedback-reply-${item.id}`} value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-[10px]" placeholder="Write a reply..." /><button type="submit" disabled={!replyDraft.trim()} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-indigo-700 disabled:opacity-40">Send reply</button></form>}</article>)}</div></Panel></div>;
+}
+
 function StudentMessages() {
-  const [active, setActive] = useState('Prof. Sharma');
+  const [active, setActive] = useDemoState('student-active-conversation', 'Prof. Sharma');
   const [message, setMessage] = useState('');
-  const [sent, setSent] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [sent, setSent] = useDemoState<Record<string, string[]>>('student-messages', {});
   const conversations = [
     { name: 'Prof. Sharma', role: 'Mentor', preview: 'I reviewed your latest experiment results.', time: '2 min', tone: 'violet' },
     { name: 'AI for Medical Image Analysis', role: 'Project team', preview: 'Dataset v2 is now available.', time: '1 hr', tone: 'blue' },
@@ -501,10 +587,10 @@ function StudentMessages() {
     <div className="mx-auto max-w-[1500px] space-y-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <PageIntro eyebrow="Student workspace" title="Messages" description="Communicate with your project teams and mentors." />
       <section className="grid min-h-[32rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-[17rem_minmax(0,1fr)]">
-        <aside className="border-b border-slate-100 p-3 md:border-b-0 md:border-r"><label className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"><Search className="size-3.5 text-slate-400" aria-hidden="true" /><span className="sr-only">Search conversations</span><input className="w-full bg-transparent text-[10px] outline-none" placeholder="Search conversations..." /></label><ul className="mt-3 flex gap-2 overflow-x-auto md:flex-col">{conversations.map((conversation) => <li key={conversation.name} className="min-w-48 md:min-w-0"><button type="button" onClick={() => setActive(conversation.name)} className={cn('flex w-full items-center gap-2 rounded-lg p-2 text-left', active === conversation.name ? 'bg-indigo-50' : 'hover:bg-slate-50')}><UserAvatar name={conversation.name} tone={conversation.tone} /><span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-semibold text-slate-900">{conversation.name}</span><span className="block truncate text-[9px] text-slate-500">{conversation.preview}</span></span><span className="text-[8px] text-slate-400">{conversation.time}</span></button></li>)}</ul></aside>
-        <div className="flex min-h-[26rem] min-w-0 flex-col"><header className="border-b border-slate-100 px-4 py-3"><p className="text-[10px] font-bold text-slate-900">{active}</p><p className="text-[9px] text-slate-500">{conversations.find((conversation) => conversation.name === active)?.role} · AI for Medical Image Analysis</p></header><div className="flex-1 space-y-3 overflow-y-auto p-4"><p className="max-w-[82%] rounded-xl bg-slate-100 p-3 text-[10px] leading-4 text-slate-700">Hi Sharath, I reviewed your latest experiment results. Could you add a short note about the evaluation cohort before our next check-in?</p><p className="text-pretty ml-auto max-w-[82%] rounded-xl bg-indigo-600 p-3 text-[10px] leading-4 text-white">Absolutely. I’ll add the cohort summary to the research workspace and share reproducibility notes.</p>{sent.map((sentMessage, index) => <p key={`${index}-${sentMessage}`} className="ml-auto max-w-[82%] rounded-xl bg-indigo-600 p-3 text-[10px] leading-4 text-white">{sentMessage}</p>)}</div><form className="flex gap-2 border-t border-slate-100 p-3" onSubmit={(event) => { event.preventDefault(); if (message.trim()) { setSent((current) => [...current, message.trim()]); setMessage(''); } }}><label htmlFor="student-message" className="sr-only">Write a message</label><input id="student-message" value={message} onChange={(event) => setMessage(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-[10px]" placeholder="Type a message..." /><button type="submit" aria-label="Send demo message" className="flex size-9 items-center justify-center rounded-lg bg-indigo-600 text-white"><Send className="size-4" aria-hidden="true" /></button></form></div>
+        <aside className="border-b border-slate-100 p-3 md:border-b-0 md:border-r"><label className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"><Search className="size-3.5 text-slate-400" aria-hidden="true" /><span className="sr-only">Search conversations</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-[10px] outline-none" placeholder="Search conversations..." /></label><ul className="mt-3 flex gap-2 overflow-x-auto md:flex-col">{conversations.filter((conversation) => `${conversation.name} ${conversation.role} ${conversation.preview}`.toLowerCase().includes(search.toLowerCase())).map((conversation) => <li key={conversation.name} className="min-w-48 md:min-w-0"><button type="button" onClick={() => setActive(conversation.name)} className={cn('flex w-full items-center gap-2 rounded-lg p-2 text-left', active === conversation.name ? 'bg-indigo-50' : 'hover:bg-slate-50')}><UserAvatar name={conversation.name} tone={conversation.tone} /><span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-semibold text-slate-900">{conversation.name}</span><span className="block truncate text-[9px] text-slate-500">{conversation.preview}</span></span><span className="text-[8px] text-slate-400">{conversation.time}</span></button></li>)}</ul></aside>
+        <div className="flex min-h-[26rem] min-w-0 flex-col"><header className="border-b border-slate-100 px-4 py-3"><p className="text-[10px] font-bold text-slate-900">{active}</p><p className="text-[9px] text-slate-500">{conversations.find((conversation) => conversation.name === active)?.role} · AI for Medical Image Analysis</p></header><div className="flex-1 space-y-3 overflow-y-auto p-4"><p className="max-w-[82%] rounded-xl bg-slate-100 p-3 text-[10px] leading-4 text-slate-700">Hi Sharath, I reviewed your latest experiment results. Could you add a short note about the evaluation cohort before our next check-in?</p><p className="text-pretty ml-auto max-w-[82%] rounded-xl bg-indigo-600 p-3 text-[10px] leading-4 text-white">Absolutely. I’ll add the cohort summary to the research workspace and share reproducibility notes.</p>{(sent[active] ?? []).map((sentMessage, index) => <p key={`${index}-${sentMessage}`} className="ml-auto max-w-[82%] rounded-xl bg-indigo-600 p-3 text-[10px] leading-4 text-white">{sentMessage}</p>)}</div><form className="flex gap-2 border-t border-slate-100 p-3" onSubmit={(event) => { event.preventDefault(); if (message.trim()) { setSent((current) => ({ ...current, [active]: [...(current[active] ?? []), message.trim()] })); setMessage(''); } }}><label htmlFor="student-message" className="sr-only">Write a message</label><input id="student-message" value={message} onChange={(event) => setMessage(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-[10px]" placeholder="Type a message..." /><button type="submit" disabled={!message.trim()} aria-label="Send demo message" className="flex size-9 items-center justify-center rounded-lg bg-indigo-600 text-white disabled:opacity-50"><Send className="size-4" aria-hidden="true" /></button></form></div>
       </section>
-      <p className="text-center text-[9px] text-slate-400">Messages are sample content; replies stay in local page state.</p>
+      <p className="text-center text-[9px] text-slate-400">Sample conversation content; new messages are saved locally in this browser.</p>
     </div>
   );
 }
@@ -520,9 +606,29 @@ function DataTable({ rows, headers }: { rows: { title: string; subtitle: string;
   );
 }
 
+function DemoMessagesPage({ role }: { role: UserRole }) {
+  const [active, setActive] = useDemoState(`active-chat-${role.toLowerCase()}`, demoPeople[0].name);
+  const [messages, setMessages] = useDemoState<Record<string, string[]>>(`messages-${role.toLowerCase()}`, {});
+  const [search, setSearch] = useState('');
+  const [draft, setDraft] = useState('');
+  const conversations = demoPeople.filter((person) => `${person.name} ${person.role} ${person.skills.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  const sendMessage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setMessages((current) => ({ ...current, [active]: [...(current[active] ?? []), text] }));
+    setDraft('');
+  };
+  return <div className="mx-auto max-w-[1200px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow={roleName(role)} title="Messages" description="Demo conversations are local previews. Messages you send are saved in this browser." /><section className="grid min-h-[30rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-[18rem_minmax(0,1fr)]"><aside className="border-b border-slate-100 p-3 md:border-b-0 md:border-r"><label className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"><Search className="size-3.5 text-slate-400" aria-hidden="true" /><span className="sr-only">Search conversations</span><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-[10px] outline-none" placeholder="Search conversations" /></label><ul className="mt-3 space-y-1">{conversations.map((person) => <li key={person.name}><button type="button" aria-pressed={active === person.name} onClick={() => setActive(person.name)} className={cn('flex w-full items-center gap-2 rounded-lg p-2 text-left', active === person.name ? 'bg-indigo-50' : 'hover:bg-slate-50')}><UserAvatar name={person.name} /><span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-slate-800">{person.name}</span><span className="block truncate text-[9px] text-slate-500">{person.role} · sample conversation</span></span></button></li>)}</ul>{conversations.length === 0 && <p className="p-3 text-[10px] text-slate-500">No matching conversations.</p>}</aside><div className="flex min-h-72 min-w-0 flex-col"><header className="border-b border-slate-100 px-4 py-3"><p className="text-[10px] font-bold text-slate-900">{active}</p><p className="text-[9px] text-slate-500">Sample project conversation</p></header><div className="flex-1 space-y-3 overflow-y-auto p-4"><p className="max-w-[80%] rounded-xl bg-slate-100 p-3 text-[10px] leading-4 text-slate-700">Thanks for sharing the latest project update. Please add your next research note in the workspace.</p>{(messages[active] ?? []).map((message, index) => <p key={`${index}-${message}`} className="ml-auto max-w-[80%] rounded-xl bg-indigo-600 p-3 text-[10px] leading-4 text-white">{message}</p>)}</div><form onSubmit={sendMessage} className="flex gap-2 border-t border-slate-100 p-3"><label htmlFor="demo-message-input" className="sr-only">Write a message</label><input id="demo-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Write a message..." /><button type="submit" disabled={!draft.trim()} className="rounded-lg bg-indigo-700 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-50">Send</button></form></div></section></div>;
+}
+
 function GenericRolePage({ role, section }: { role: UserRole; section: string }) {
   const [decision, setDecision] = useState<string | null>(null);
   const [decisions, setDecisions] = useDemoState<Record<string, string>>(`decisions-${role.toLowerCase()}-${section}`, {});
+  const [showResearchForm, setShowResearchForm] = useState(false);
+  const [researchTitle, setResearchTitle] = useState('');
+  const [researchSummary, setResearchSummary] = useState('');
+  const [researchDrafts, setResearchDrafts] = useDemoState<{ id: string; title: string; summary: string; status: string }[]>('research-submissions', []);
   const title = titleCase(section);
   const projectRows = demoProjects.map((project) => ({ title: project.title, subtitle: `${project.domain} · ${project.sponsor}`, status: project.status, meta: `${project.progress}% complete` }));
   const peopleRows = demoPeople.map((person) => ({ title: person.name, subtitle: person.role, status: person.status, meta: person.skills.join(', ') }));
@@ -533,7 +639,7 @@ function GenericRolePage({ role, section }: { role: UserRole; section: string })
   ];
   const isAccess = section === 'access' || section === 'access-requests';
   const isProjects = section === 'projects' || section === 'research-workspace';
-  const isApplication = section === 'applications' || section === 'research-problems';
+  const isApplication = section === 'applications' || section === 'research-problems' || (role === 'SPONSOR' && section === 'proposals');
   const isSkills = section === 'skills' || section === 'team';
   const rows = isProjects ? projectRows : isSkills ? peopleRows : isAccess ? accessRows : section === 'users' ? peopleRows : section === 'audit' || section === 'security' || section === 'governance' ? demoActivity.map((item) => ({ title: item.name, subtitle: item.detail, status: 'Recorded', meta: item.time })) : [
     { title: 'Baseline model methodology', subtitle: 'AI for Medical Image Analysis', status: 'Under review', meta: '2 hours ago' },
@@ -543,11 +649,27 @@ function GenericRolePage({ role, section }: { role: UserRole; section: string })
 
   if (section === 'ai-workspace') return <AIWorkspace />;
   if (section === 'skills') return <SkillsPage role={role} />;
+  if (section === 'messages') return <DemoMessagesPage role={role} />;
+  if (role === 'STUDENT' && section === 'mentor-feedback') return <MentorFeedbackPage />;
+
+  const submitResearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanTitle = researchTitle.trim();
+    const cleanSummary = researchSummary.trim();
+    if (!cleanTitle || !cleanSummary) return;
+    setResearchDrafts((items) => [{ id: `research-${Date.now()}`, title: cleanTitle, summary: cleanSummary, status: 'Pending review' }, ...items]);
+    setDecision(`“${cleanTitle}” was submitted for review in the demo.`);
+    setResearchTitle('');
+    setResearchSummary('');
+    setShowResearchForm(false);
+  };
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <PageIntro eyebrow={roleName(role)} title={title} description={pageDescription(role, section)} action={section === 'research-problems' || section === 'applications' ? <MockAction onClick={() => setDecision('Draft created in the local preview only.')}> <Plus className="mr-1 inline size-3" /> {role === 'SPONSOR' ? 'Publish research problem' : 'Apply to a project'}</MockAction> : undefined} />
+      <PageIntro eyebrow={roleName(role)} title={title} description={pageDescription(role, section)} action={(role === 'RESEARCHER' && section === 'research-problems') || (role === 'SPONSOR' && section === 'research-problems') ? <MockAction onClick={() => setShowResearchForm((show) => !show)}><Plus className="mr-1 inline size-3" />{showResearchForm ? 'Close form' : role === 'SPONSOR' ? 'Create research call' : 'Submit research for review'}</MockAction> : section === 'applications' && role === 'RESEARCHER' ? <TextLink href="/researcher/research-problems">Explore research opportunities</TextLink> : undefined} />
       {decision && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">{decision}</div>}
+      {showResearchForm && <form onSubmit={submitResearch} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><label className="text-[10px] font-semibold text-slate-700">Research title<input required value={researchTitle} onChange={(event) => setResearchTitle(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><label className="text-[10px] font-semibold text-slate-700">Public summary<textarea required value={researchSummary} onChange={(event) => setResearchSummary(event.target.value)} className="mt-1 block min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><button type="submit" className="w-fit rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white">Submit for review</button></form>}
+      {researchDrafts.length > 0 && section === 'research-problems' && <Panel title="Your submissions"><ul className="divide-y divide-slate-100">{researchDrafts.map((draft) => <li key={draft.id} className="flex items-center justify-between gap-3 py-3"><div><p className="text-[10px] font-semibold text-slate-900">{draft.title}</p><p className="text-[9px] text-slate-500">{draft.summary}</p></div><StatusBadge tone="amber">{draft.status}</StatusBadge></li>)}</ul></Panel>}
       {section === 'messages' ? (
         <div className="grid min-h-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-[16rem_minmax(0,1fr)]">
           <aside className="border-b border-slate-100 p-3 md:border-b-0 md:border-r"><label className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"><Search className="size-3.5 text-slate-400" aria-hidden="true" /><input aria-label="Search messages" className="w-full bg-transparent text-[10px] outline-none" placeholder="Search conversations" /></label><ul className="mt-3 space-y-1">{demoPeople.slice(0, 3).map((person) => <li key={person.name}><button type="button" onClick={() => setDecision(`Showing the sample conversation with ${person.name}.`)} className="flex w-full items-center gap-2 rounded-lg bg-slate-50 p-2 text-left"><UserAvatar name={person.name} /><span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-slate-800">{person.name}</span><span className="block truncate text-[9px] text-slate-500">Project update · Yesterday</span></span></button></li>)}</ul></aside>
@@ -555,7 +677,9 @@ function GenericRolePage({ role, section }: { role: UserRole; section: string })
         </div>
       ) : section === 'ai-workspace' ? <AIWorkspace /> : section === 'skills' ? <SkillsPage /> : (
         <>
-          {isApplication && role === 'SPONSOR' && <div className="grid gap-3 md:grid-cols-2">{demoProjects.slice(0, 4).map((project) => <article key={project.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-2"><StatusBadge tone="blue">{project.domain}</StatusBadge><StatusBadge tone="emerald">Published</StatusBadge></div><h2 className="text-balance mt-3 text-sm font-bold text-slate-900">{project.title}</h2><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-600">{project.summary}</p><div className="mt-3 flex items-center justify-between text-[10px] text-slate-500"><span>{project.members} applicants</span><span>Reward: {project.reward}</span></div><MockAction onClick={() => setDecision(`Application panel opened for ${project.title}.`)}>Review applications</MockAction></article>)}</div>}
+          {isApplication && role === 'SPONSOR' && section !== 'proposals' && <div className="grid gap-3 md:grid-cols-2">{demoProjects.slice(0, 4).map((project) => <article key={project.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-2"><StatusBadge tone="blue">{project.domain}</StatusBadge><StatusBadge tone="emerald">Published</StatusBadge></div><h2 className="text-balance mt-3 text-sm font-bold text-slate-900">{project.title}</h2><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-600">{project.summary}</p><div className="mt-3 flex items-center justify-between text-[10px] text-slate-500"><span>{project.members} applicants</span><span>Reward: {project.reward}</span></div><MockAction onClick={() => setDecision(`Application panel opened for ${project.title}.`)}>Review applications</MockAction></article>)}</div>}
+          {role === 'SPONSOR' && section === 'proposals' && <Panel title="Research proposals"><ul className="divide-y divide-slate-100">{demoProjects.slice(0, 4).map((project) => { const status = decisions[project.id] ?? 'Under review'; return <li key={project.id} className="flex flex-wrap items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{project.title}</p><p className="text-[9px] text-slate-500">{project.domain} · {project.sponsor} · {project.reward}</p></div><StatusBadge tone={status === 'Shortlisted' ? 'emerald' : status === 'Declined' ? 'rose' : 'amber'}>{status}</StatusBadge>{status === 'Under review' && <div className="flex gap-2"><button type="button" onClick={() => { if (!window.confirm(`Decline the proposal “${project.title}”?`)) return; setDecisions((current) => ({ ...current, [project.id]: 'Declined' })); setDecision(`“${project.title}” was declined.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-rose-700">Decline</button><button type="button" onClick={() => { if (!window.confirm(`Shortlist “${project.title}”?`)) return; setDecisions((current) => ({ ...current, [project.id]: 'Shortlisted' })); setDecision(`“${project.title}” was shortlisted.`); }} className="rounded-lg bg-emerald-700 px-3 py-2 text-[9px] font-semibold text-white">Shortlist</button></div>}</li>; })}</ul></Panel>}
+          {role === 'MENTOR' && section === 'reviews' && <Panel title="Contribution review queue"><ul className="divide-y divide-slate-100">{demoContributions.filter((contribution) => contribution.status !== 'Verified').map((contribution) => { const status = decisions[contribution.id] ?? contribution.status; return <li key={contribution.id} className="flex flex-wrap items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{contribution.title}</p><p className="text-[9px] text-slate-500">{contribution.project} · {contribution.reviewer}</p></div><StatusBadge tone={status === 'Approved' ? 'emerald' : status === 'Rejected' ? 'rose' : 'amber'}>{status}</StatusBadge>{status !== 'Approved' && status !== 'Rejected' && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { if (!window.confirm(`Request changes to “${contribution.title}”?`)) return; setDecisions((current) => ({ ...current, [contribution.id]: 'Changes requested' })); setDecision(`Changes requested for “${contribution.title}”.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-amber-700">Request changes</button><button type="button" onClick={() => { if (!window.confirm(`Reject “${contribution.title}”?`)) return; setDecisions((current) => ({ ...current, [contribution.id]: 'Rejected' })); setDecision(`“${contribution.title}” was rejected.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-rose-700">Reject</button><button type="button" onClick={() => { if (!window.confirm(`Approve “${contribution.title}”?`)) return; setDecisions((current) => ({ ...current, [contribution.id]: 'Approved' })); setDecision(`“${contribution.title}” was approved in the demo.`); }} className="rounded-lg bg-emerald-700 px-3 py-2 text-[9px] font-semibold text-white">Approve</button></div>}</li>; })}</ul></Panel>}
           {section === 'credits' || section === 'rewards' ? <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Available balance" value="420" detail="Sample credits" icon={Wallet} tone="violet" /><StatCard label="Pending review" value="180" detail="Awaiting mentor review" icon={FileClock} tone="amber" /><StatCard label="Awarded this cycle" value="1,260" detail="Across 4 contributions" icon={Award} tone="emerald" /></div> : null}
           {section === 'contributions' && <Panel title="AI Mesh Contribution Analysis"><div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3"><div className="flex items-center gap-2"><BrainCircuit className="size-4 text-indigo-700" aria-hidden="true" /><p className="text-[10px] font-bold text-slate-900">Contribution analysis · sample</p></div><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-600">AI analysis suggests a preliminary award of 80 credits based on reproducibility and documentation. Mentor review remains the final decision.</p><div className="mt-2 flex gap-2"><StatusBadge tone="violet">Suggested: 80 credits</StatusBadge><StatusBadge tone="amber">Mentor review pending</StatusBadge></div></div><DataTable rows={rows} headers={['Contribution', 'Review status', 'Suggested credits', 'Project']} /></Panel>}
           {section === 'verification' && <Panel title="Organization and skill verification queue"><DataTable rows={[{ title: 'MedScan Labs', subtitle: 'Organization verification · submitted Oct 4', status: 'Pending review', meta: 'Private documents' }, { title: 'Python · Sharath Swaroop', subtitle: 'Skill test · score 92%', status: 'Verified', meta: 'AI analysis + mentor review' }, { title: 'Computer Vision · Priya Nair', subtitle: 'Skill test · assessment completed', status: 'Pending review', meta: 'Mentor review' }]} /></Panel>}
@@ -565,7 +689,7 @@ function GenericRolePage({ role, section }: { role: UserRole; section: string })
               <DataTable rows={rows} />
             </Panel>
           )}
-          {role === 'RESEARCHER' && (section === 'applications' || section === 'research-workspace') && <Panel title="Available research opportunities"><DataTable rows={demoProjects.slice(0, 3).map((project) => ({ title: project.title, subtitle: `${project.domain} · ${project.sponsor}`, status: 'Open', meta: project.reward }))} /><div className="mt-3 flex gap-2"><MockAction onClick={() => setDecision('Application submitted in local preview state.')}>Submit application</MockAction><MockAction tone="neutral" onClick={() => setDecision('Access request saved in local preview state.')}>Request access</MockAction></div></Panel>}
+          {role === 'RESEARCHER' && (section === 'applications' || section === 'research-workspace') && <Panel title="Available research opportunities"><ul className="divide-y divide-slate-100">{demoProjects.slice(0, 3).map((project) => { const status = decisions[project.id] ?? 'Open'; return <li key={project.id} className="flex flex-wrap items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{project.title}</p><p className="text-[9px] text-slate-500">{project.domain} · {project.sponsor} · {project.reward}</p></div><StatusBadge tone={status === 'Application submitted' ? 'emerald' : 'blue'}>{status}</StatusBadge>{status === 'Open' && <div className="flex gap-2"><button type="button" onClick={() => { if (!window.confirm(`Submit an application for ${project.title}?`)) return; setDecisions((current) => ({ ...current, [project.id]: 'Application submitted' })); setDecision(`Your application for “${project.title}” was submitted in the demo.`); }} className="rounded-lg bg-indigo-600 px-3 py-2 text-[9px] font-semibold text-white">Apply</button><button type="button" onClick={() => { setDecisions((current) => ({ ...current, [project.id]: 'Access requested' })); setDecision(`Access was requested for “${project.title}”.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-slate-700">Request access</button></div>}</li>; })}</ul></Panel>}
         </>
       )}
       <p className="text-center text-[9px] text-slate-400">Sample data only · Actions on this screen do not contact a server.</p>
@@ -591,16 +715,19 @@ function pageDescription(role: UserRole, section: string) {
 
 function DemoNotifications({ role }: { role: UserRole }) {
   const [read, setRead] = useDemoState<string[]>('notification-read', []);
+  useEffect(() => {
+    window.dispatchEvent(new Event('gardenia:notifications-updated'));
+  }, [read]);
   return (
     <div className="mx-auto max-w-[1100px] space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-      <PageIntro eyebrow={roleName(role)} title="Notifications" description="Updates from your research workspace. Read status is saved locally for this demo." action={<button type="button" onClick={() => { setRead(demoNotifications.map((item) => item.title)); window.dispatchEvent(new Event('gardenia:notifications-updated')); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>} />
+      <PageIntro eyebrow={roleName(role)} title="Notifications" description="Updates from your research workspace. Read status is saved locally for this demo." action={<button type="button" onClick={() => setRead(demoNotifications.map((item) => item.title))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>} />
       <Panel title="Recent notifications" action={<StatusBadge tone="blue">{demoNotifications.length - read.length} unread</StatusBadge>}>
         <ul className="divide-y divide-slate-100">{demoNotifications.map((item) => {
           const isRead = read.includes(item.title);
           return <li key={item.title} className="flex items-start gap-3 py-3">
             <span className={cn('mt-1 size-2 shrink-0 rounded-full', isRead ? 'bg-slate-300' : 'bg-indigo-600')} aria-hidden="true" />
             <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-[9px] text-slate-500">{item.detail} · {item.time}</p></div>
-            {!isRead && <button type="button" onClick={() => { setRead((current) => [...current, item.title]); window.dispatchEvent(new Event('gardenia:notifications-updated')); }} className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50">Mark read</button>}
+            {!isRead && <button type="button" onClick={() => setRead((current) => [...current, item.title])} className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50">Mark read</button>}
             {isRead && <StatusBadge tone="slate">Read</StatusBadge>}
           </li>;
         })}</ul>
@@ -609,11 +736,72 @@ function DemoNotifications({ role }: { role: UserRole }) {
   );
 }
 
+function AdminWorkflowPage({ section }: { section: string }) {
+  const [users, setUsers] = useDemoState('admin-users', [
+    { id: 'demo-user-rahul', name: 'Rahul Sharma', email: 'rahul@example.demo', role: 'STUDENT', status: 'Active' },
+    { id: 'demo-user-sneha', name: 'Sneha Iyer', email: 'sneha@example.demo', role: 'RESEARCHER', status: 'Active' },
+    { id: 'demo-user-aditya', name: 'Aditya Reddy', email: 'aditya@example.demo', role: 'MENTOR', status: 'Pending verification' },
+    { id: 'demo-user-kavya', name: 'Kavya Nair', email: 'kavya@example.demo', role: 'STUDENT', status: 'Active' },
+  ]);
+  const [organizations, setOrganizations] = useDemoState('admin-organizations', [
+    { id: 'demo-org-iit', name: 'IIT Bangalore', category: 'University', status: 'Pending review' },
+    { id: 'demo-org-green', name: 'GreenTech Labs', category: 'Research Institute', status: 'Pending review' },
+    { id: 'demo-org-health', name: 'HealthAI Foundation', category: 'Non-profit', status: 'Pending review' },
+  ]);
+  const [projects, setProjects] = useDemoState('admin-project-approvals', [
+    { id: 'demo-project-soil', title: 'AI for Soil Analysis', organization: 'IIT Bangalore' },
+    { id: 'demo-project-carbon', title: 'Blockchain for Carbon Credits', organization: 'GreenTech Labs' },
+    { id: 'demo-project-clinic', title: 'IoT for Rural Healthcare', organization: 'HealthAI Foundation' },
+  ]);
+  const [projectDecisions, setProjectDecisions] = useDemoState<Record<string, string>>('admin-project-decisions', {});
+  const [announcements, setAnnouncements] = useDemoState<{ id: string; title: string; message: string }[]>('admin-announcements', []);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<UserRole>('STUDENT');
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementMessage, setAnnouncementMessage] = useState('');
+  const [notice, setNotice] = useState('');
+  const pageTitle = titleCase(section);
+  const saveAnnouncement = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = announcementTitle.trim();
+    const message = announcementMessage.trim();
+    if (!title || !message) return;
+    setAnnouncements((items) => [{ id: `announcement-${Date.now()}`, title, message }, ...items]);
+    setAnnouncementTitle('');
+    setAnnouncementMessage('');
+    setNotice('Announcement saved locally for this demo.');
+  };
+
+  if (section === 'users') {
+    const addUser = (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const cleanName = name.trim();
+      const cleanEmail = email.trim();
+      if (!cleanName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return;
+      setUsers((items) => [{ id: `demo-user-${Date.now()}`, name: cleanName, email: cleanEmail, role, status: 'Invited' }, ...items]);
+      setName('');
+      setEmail('');
+      setNotice(`${cleanName} was added to the demo user directory.`);
+    };
+    return <div className="mx-auto max-w-[1200px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow="Admin workspace" title="User Management" description="Manage sample users, roles, invitations, and account status. Changes are saved to this browser only." />{notice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p>}<Panel title="Add demo user"><form onSubmit={addUser} className="grid gap-2 sm:grid-cols-[1fr_1fr_0.7fr_auto] sm:items-end"><label className="text-[10px] font-semibold text-slate-700">Full name<input required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><label className="text-[10px] font-semibold text-slate-700">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><label className="text-[10px] font-semibold text-slate-700">Role<select value={role} onChange={(event) => setRole(event.target.value as UserRole)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">{(['STUDENT', 'RESEARCHER', 'MENTOR', 'SPONSOR'] as UserRole[]).map((item) => <option key={item} value={item}>{roleName(item)}</option>)}</select></label><button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white">Add user</button></form></Panel><Panel title="People"><ul className="divide-y divide-slate-100">{users.map((user) => <li key={user.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{user.name}</p><p className="text-[9px] text-slate-500">{user.email} · {user.status}</p></div><select aria-label={`Role for ${user.name}`} value={user.role} onChange={(event) => { const nextRole = event.target.value as UserRole; if (!window.confirm(`Change ${user.name}'s role to ${roleName(nextRole)}?`)) return; setUsers((items) => items.map((item) => item.id === user.id ? { ...item, role: nextRole } : item)); setNotice(`${user.name}'s demo role was updated.`); }} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[9px]">{(['STUDENT', 'RESEARCHER', 'MENTOR', 'SPONSOR'] as UserRole[]).map((item) => <option key={item} value={item}>{roleName(item)}</option>)}</select><button type="button" onClick={() => { const nextStatus = user.status === 'Suspended' ? 'Active' : 'Suspended'; if (!window.confirm(`${nextStatus === 'Suspended' ? 'Suspend' : 'Reactivate'} ${user.name}?`)) return; setUsers((items) => items.map((item) => item.id === user.id ? { ...item, status: nextStatus } : item)); setNotice(`${user.name}'s status is now ${nextStatus}.`); }} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-slate-700">{user.status === 'Suspended' ? 'Reactivate' : 'Suspend'}</button></li>)}</ul></Panel></div>;
+  }
+
+  if (section === 'organizations') return <div className="mx-auto max-w-[1100px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow="Admin workspace" title="Organizations" description="Review sample partner organizations. Decisions are local demo state, not verified database records." />{notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p>}<Panel title="Organization verification"><ul className="divide-y divide-slate-100">{organizations.map((item) => <li key={item.id} className="flex flex-wrap items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{item.name}</p><p className="text-[9px] text-slate-500">{item.category}</p></div><StatusBadge tone={item.status === 'Approved' ? 'emerald' : item.status === 'Rejected' ? 'rose' : 'amber'}>{item.status}</StatusBadge>{item.status === 'Pending review' && <div className="flex gap-2"><button type="button" onClick={() => { if (!window.confirm(`Reject verification for ${item.name}?`)) return; setOrganizations((items) => items.map((row) => row.id === item.id ? { ...row, status: 'Rejected' } : row)); setNotice(`${item.name} verification was rejected.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-rose-700">Reject</button><button type="button" onClick={() => { if (!window.confirm(`Approve verification for ${item.name}?`)) return; setOrganizations((items) => items.map((row) => row.id === item.id ? { ...row, status: 'Approved' } : row)); setNotice(`${item.name} was verified in this demo.`); }} className="rounded-lg bg-emerald-700 px-3 py-2 text-[9px] font-semibold text-white">Verify</button></div>}</li>)}</ul></Panel></div>;
+
+  if (section === 'projects' || section === 'verification') return <div className="mx-auto max-w-[1100px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow="Admin workspace" title={section === 'verification' ? 'Project Verification' : 'Research Projects'} description="Review and decide on sample project approvals. Every decision is confirmed and stored locally." />{notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p>}<Panel title="Pending project approvals"><ul className="divide-y divide-slate-100">{projects.map((item) => { const status = projectDecisions[item.id] ?? 'Pending review'; return <li key={item.id} className="flex flex-wrap items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{item.title}</p><p className="text-[9px] text-slate-500">{item.organization}</p></div><StatusBadge tone={status === 'Approved' ? 'emerald' : status === 'Rejected' ? 'rose' : 'amber'}>{status}</StatusBadge>{status === 'Pending review' && <div className="flex gap-2"><button type="button" onClick={() => { if (!window.confirm(`Reject “${item.title}”?`)) return; setProjectDecisions((current) => ({ ...current, [item.id]: 'Rejected' })); setNotice(`${item.title} was rejected.`); }} className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold text-rose-700">Reject</button><button type="button" onClick={() => { if (!window.confirm(`Approve “${item.title}”?`)) return; setProjectDecisions((current) => ({ ...current, [item.id]: 'Approved' })); setNotice(`${item.title} was approved in the demo.`); }} className="rounded-lg bg-emerald-700 px-3 py-2 text-[9px] font-semibold text-white">Approve</button></div>}</li>; })}</ul></Panel></div>;
+
+  if (section === 'announcements') return <div className="mx-auto max-w-[1100px] space-y-4 px-4 py-6 sm:px-6 lg:px-8"><PageIntro eyebrow="Admin workspace" title="Announcements" description="Draft and manage sample platform announcements. No message is sent to real users." />{notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p>}<Panel title="Create announcement"><form onSubmit={saveAnnouncement} className="space-y-3"><label className="block text-[10px] font-semibold text-slate-700">Title<input required value={announcementTitle} onChange={(event) => setAnnouncementTitle(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><label className="block text-[10px] font-semibold text-slate-700">Message<textarea required value={announcementMessage} onChange={(event) => setAnnouncementMessage(event.target.value)} className="mt-1 block min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" /></label><button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white">Save announcement</button></form></Panel><Panel title="Saved demo announcements">{announcements.length ? <ul className="divide-y divide-slate-100">{announcements.map((item) => <li key={item.id} className="flex items-start gap-3 py-3"><div className="flex-1"><p className="text-[10px] font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-[10px] text-slate-600">{item.message}</p></div><button type="button" onClick={() => { if (!window.confirm(`Delete “${item.title}”?`)) return; setAnnouncements((items) => items.filter((announcement) => announcement.id !== item.id)); setNotice('Announcement deleted.'); }} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-rose-700">Delete</button></li>)}</ul> : <p className="text-[10px] text-slate-500">No announcements have been drafted yet.</p>}</Panel></div>;
+
+  return <GenericRolePage role="ADMIN" section={section} />;
+}
+
 function ProjectWorkspace({ id, section }: { id: string; section: string }) {
   const { currentRole } = useRole();
   const [accessRequests, setAccessRequests] = useDemoState<{ projectId: string; resource: string; reason: string; status: string }[]>('project-access-requests', []);
   const project = demoProjects.find((item) => item.id === id) ?? demoProjects[0];
-  const accessRequested = accessRequests.some((request) => request.projectId === project.id && request.status === 'Pending');
+  const currentAccessRequest = [...accessRequests].reverse().find((request) => request.projectId === project.id && ['Pending', 'Approved'].includes(request.status));
+  const accessRequested = Boolean(currentAccessRequest);
   const activeSection = projectSections.some(([, path]) => path === section) ? section : 'overview';
   const title = project.title;
   const navLinks = projectSections;
@@ -641,6 +829,7 @@ function ProjectWorkspace({ id, section }: { id: string; section: string }) {
               role={currentRole}
               section={activeSection}
               accessRequested={accessRequested}
+              accessStatus={currentAccessRequest?.status ?? null}
               accessRequests={accessRequests.filter((request) => request.projectId === project.id)}
               onRequestAccess={(resource, reason) => setAccessRequests((current) => [...current, { projectId: project.id, resource, reason, status: 'Pending' }])}
               onDecideAccess={(resource, status) => {
@@ -668,6 +857,7 @@ function ProjectSectionContent({
   role,
   section,
   accessRequested,
+  accessStatus,
   accessRequests,
   onRequestAccess,
   onDecideAccess,
@@ -676,6 +866,7 @@ function ProjectSectionContent({
   role: UserRole;
   section: string;
   accessRequested: boolean;
+  accessStatus: string | null;
   accessRequests: { resource: string; reason: string; status: string }[];
   onRequestAccess: (resource: string, reason: string) => void;
   onDecideAccess: (resource: string, status: 'Approved' | 'Rejected') => void;
@@ -685,7 +876,7 @@ function ProjectSectionContent({
   const [requestError, setRequestError] = useState('');
   const shellClass = 'rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm';
   if (section === 'ai-workspace') return <AIWorkspace />;
-  if (section === 'access') return <section className="rounded-xl border border-indigo-900 bg-indigo-950/60 p-4"><p className="text-xs font-bold text-white">{role === 'SPONSOR' || role === 'MENTOR' ? 'Project access requests' : 'Request project access'}</p>{role === 'SPONSOR' || role === 'MENTOR' ? <ul className="mt-3 space-y-2">{accessRequests.length ? accessRequests.map((request) => <li key={`${request.resource}-${request.reason}`} className="rounded-lg border border-slate-700 p-3"><p className="text-[10px] font-semibold text-white">{request.resource} · {request.status}</p><p className="mt-1 text-[9px] text-slate-300">{request.reason}</p>{request.status === 'Pending' && <div className="mt-2 flex gap-2"><MockAction tone="neutral" onClick={() => onDecideAccess(request.resource, 'Rejected')}>Reject</MockAction><MockAction onClick={() => onDecideAccess(request.resource, 'Approved')}>Approve</MockAction></div>}</li>) : <li className="text-[10px] text-slate-300">No demo requests have been submitted yet.</li>}</ul> : role === 'ADMIN' ? <p className="mt-2 text-[10px] text-slate-300">Access decisions are managed by the project sponsor or mentor.</p> : <><p className="text-pretty mt-1 text-[10px] text-slate-300">Choose a resource scope and explain how it supports your research work.</p><label className="mt-3 block text-[10px] font-medium text-slate-300">Resource scope<select disabled={accessRequested} value={resource} onChange={(event) => setResource(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option>Research dataset v2</option><option>Implementation workspace</option><option>Project charter</option></select></label><label className="mt-3 block text-[10px] font-medium text-slate-300">Reason<textarea disabled={accessRequested} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" placeholder="Describe how access supports your work." /></label>{requestError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{requestError}</p>}<MockAction disabled={accessRequested} onClick={() => { if (!reason.trim()) { setRequestError('Explain why this resource is needed before submitting.'); return; } onRequestAccess(resource, reason.trim()); setRequestError(''); }}>{accessRequested ? 'Access request sent' : 'Submit access request'}</MockAction>{accessRequested && <p className="mt-2 text-[10px] text-emerald-300" role="status">Your sample request is waiting for a sponsor or mentor decision.</p>}</>}</section>;
+  if (section === 'access') return <section className="rounded-xl border border-indigo-900 bg-indigo-950/60 p-4"><p className="text-xs font-bold text-white">{role === 'SPONSOR' || role === 'MENTOR' ? 'Project access requests' : 'Request project access'}</p>{role === 'SPONSOR' || role === 'MENTOR' ? <ul className="mt-3 space-y-2">{accessRequests.length ? accessRequests.map((request) => <li key={`${request.resource}-${request.reason}`} className="rounded-lg border border-slate-700 p-3"><p className="text-[10px] font-semibold text-white">{request.resource} · {request.status}</p><p className="mt-1 text-[9px] text-slate-300">{request.reason}</p>{request.status === 'Pending' && <div className="mt-2 flex gap-2"><MockAction tone="neutral" onClick={() => onDecideAccess(request.resource, 'Rejected')}>Reject</MockAction><MockAction onClick={() => onDecideAccess(request.resource, 'Approved')}>Approve</MockAction></div>}</li>) : <li className="text-[10px] text-slate-300">No demo requests have been submitted yet.</li>}</ul> : role === 'ADMIN' ? <p className="mt-2 text-[10px] text-slate-300">Access decisions are managed by the project sponsor or mentor.</p> : <><p className="text-pretty mt-1 text-[10px] text-slate-300">Choose a resource scope and explain how it supports your research work.</p><label className="mt-3 block text-[10px] font-medium text-slate-300">Resource scope<select disabled={accessRequested} value={resource} onChange={(event) => setResource(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option>Research dataset v2</option><option>Implementation workspace</option><option>Project charter</option></select></label><label className="mt-3 block text-[10px] font-medium text-slate-300">Reason<textarea disabled={accessRequested} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" placeholder="Describe how access supports your work." /></label>{requestError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{requestError}</p>}<MockAction disabled={accessRequested} onClick={() => { if (!reason.trim()) { setRequestError('Explain why this resource is needed before submitting.'); return; } onRequestAccess(resource, reason.trim()); setRequestError(''); }}>{accessStatus === 'Approved' ? 'Access approved' : accessRequested ? 'Access request sent' : 'Submit access request'}</MockAction>{accessRequested && <p className="mt-2 text-[10px] text-emerald-300" role="status">Access request status: {accessStatus}.</p>}</>}</section>;
   if (section === 'overview') return <div className="space-y-4"><section className={shellClass}><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-bold text-white">Problem Statement</h2><p className="text-pretty mt-2 max-w-3xl text-[10px] leading-5 text-slate-300">{project.summary}</p></div><span className="flex size-24 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-2xl" aria-label="Research lab illustration">🔬</span></div><div className="mt-4 grid gap-2 sm:grid-cols-4">{[['Domain', project.domain], ['Type', 'Research + Implementation'], ['Timeline', '3 months'], ['Reward', project.reward]].map(([label, value]) => <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-2"><p className="text-[8px] text-slate-500">{label}</p><p className="mt-1 text-[9px] font-semibold text-slate-200">{value}</p></div>)}</div><div className="mt-4"><ProgressBar value={project.progress} label="Project progress" tone="violet" /></div></section><DocumentsPanel /><ActivityPanel /></div>;
   if (section === 'charter') return <section className={shellClass}><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-white">Project Charter · Version 2</h2><StatusBadge tone="emerald">Approved</StatusBadge></div><p className="text-pretty mt-3 text-xs leading-5 text-slate-300">Establish a reproducible research workflow to evaluate {project.domain.toLowerCase()} methods, document limitations, and share evidence with the project team.</p><dl className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Research objectives</dt><dd className="mt-1 text-[10px] text-slate-200">Replicable methods, transparent evaluation, accessible findings.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Contribution policy</dt><dd className="mt-1 text-[10px] text-slate-200">Human-reviewed evidence and documented author contributions.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Data governance</dt><dd className="mt-1 text-[10px] text-slate-200">Approved project resources only; no sensitive data in public reports.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Last review</dt><dd className="mt-1 text-[10px] text-slate-200">Oct 3 · Dr. Ananya Rao</dd></div></dl><div className="mt-4"><DocumentCard title="Project Charter v2.pdf" kind="Approved · 420 KB" access="Team" /></div></section>;
   if (section === 'team') return <section className={shellClass}><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-white">Project Team</h2><StatusBadge tone="blue">{project.members} collaborators</StatusBadge></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{demoPeople.map((person) => <article key={person.name} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3"><UserAvatar name={person.name} tone="indigo" size="size-9" /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold text-slate-100">{person.name}</p><p className="text-[9px] text-slate-500">{person.role}</p></div><span className="text-right text-[9px] text-slate-400">{person.skills.join(' · ')}</span></article>)}</div><div className="mt-4 rounded-lg border border-slate-800 p-3"><p className="text-[10px] font-semibold text-slate-200">Request a mentor</p><p className="mt-1 text-[9px] text-slate-500">Ask for research guidance from an experienced mentor.</p><Link href="/researcher/access" className="mt-2 inline-flex items-center gap-1 text-[9px] font-semibold text-indigo-300">Request mentor access <ArrowRight className="size-3" aria-hidden="true" /></Link></div></section>;
@@ -737,15 +928,28 @@ export function RoleScreen({ segments }: { segments: string[] }) {
   const roleSlug = segments[0] ?? 'student';
   const role: UserRole = knownRoles.has(roleSlug) ? roleBySlug[roleSlug] : 'STUDENT';
   const roleSection = segments[1] ?? 'dashboard';
-  const selectedSection = roleSection === 'projects'
-    ? 'projects'
-    : roleSection === 'research-workspace' || roleSection === 'workspace' || roleSection === 'my-research'
+  const selectedSection = roleSection === 'tasks'
+    ? 'my-work'
+    : roleSection === 'recommended'
+      ? 'projects'
+      : roleSection === 'ai-assistant'
+        ? 'ai-workspace'
+        : roleSection === 'skill-verification' || roleSection === 'candidate-matching'
+          ? 'skills'
+          : roleSection === 'queue'
+            ? 'reviews'
+            : roleSection === 'project-verification'
+              ? 'verification'
+              : roleSection === 'research-workspace' || roleSection === 'workspace' || roleSection === 'my-research'
       ? 'research-workspace'
       : roleSection === 'access-requests' || roleSection === 'requests'
         ? 'access-requests'
         : roleSection;
   const isDashboard = selectedSection === '' || selectedSection === 'dashboard';
   if (selectedSection === 'notifications') return <DemoNotifications role={role} />;
+  if (role === 'ADMIN' && ['projects', 'verification', 'organizations', 'users', 'announcements'].includes(selectedSection)) {
+    return <AdminWorkflowPage section={selectedSection} />;
+  }
   if (role === 'STUDENT') {
     if (isDashboard) return <StudentDashboard />;
     if (selectedSection === 'projects') return <StudentProjects />;
