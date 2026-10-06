@@ -200,6 +200,6 @@ export function EmptyState({ title, description, action }: { title: string; desc
   return <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><h3 className="text-sm font-semibold text-slate-900">{title}</h3><p className="text-pretty mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">{description}</p><div className="mt-4">{action}</div></div>;
 }
 
-export function MockAction({ children, onClick, tone = 'teal' }: { children: React.ReactNode; onClick?: () => void; tone?: 'teal' | 'neutral' }) {
-  return <button type="button" onClick={onClick} className={cn('rounded-lg px-3 py-2 text-[10px] font-semibold', tone === 'teal' ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}>{children}</button>;
+export function MockAction({ children, onClick, tone = 'teal', disabled = false }: { children: React.ReactNode; onClick?: () => void; tone?: 'teal' | 'neutral'; disabled?: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} className={cn('rounded-lg px-3 py-2 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-50', tone === 'teal' ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}>{children}</button>;
 }

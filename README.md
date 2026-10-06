@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # GARDENIA
 
 GARDENIA is a charter-governed research collaboration prototype for sponsors, researchers, students, mentors, and administrators. Supabase is the application's authentication, PostgreSQL, row-level security, and private-storage provider.
@@ -68,3 +69,6 @@ These checks do not replace applying migrations to a disposable local database a
 - [Backend gaps](./docs/BACKEND_GAPS.md)
 - [Database setup](./docs/DATABASE.md)
 - [Deployment](./docs/DEPLOYMENT.md)
+=======
+# solver
+>>>>>>> 3e2898b5c2089425f041264082ae35b5bbf9fee1

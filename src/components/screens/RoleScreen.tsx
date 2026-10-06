@@ -61,6 +61,7 @@ import {
   roleName,
 } from '@/lib/mock-data';
 import { cn } from '@/lib/cn';
+import { useDemoState } from '@/lib/use-demo-state';
 
 const knownRoles = new Set(['student', 'researcher', 'mentor', 'sponsor', 'admin']);
 const roleBySlug: Record<string, UserRole> = {
@@ -110,6 +111,8 @@ function Dashboard({ role }: { role: UserRole }) {
   const admin = role === 'ADMIN';
   const person = role === 'SPONSOR' ? 'MedScan Labs' : role === 'ADMIN' ? 'Gardenia' : role === 'MENTOR' ? 'Prof. Sharma' : role === 'RESEARCHER' ? 'Dr. Ananya' : 'Sharath';
   const [applications, setApplications] = useState(12);
+  const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
+  const [mentorDecisions, setMentorDecisions] = useDemoState<Record<string, string>>('mentor-dashboard-decisions', {});
   const stats = student
     ? [
         { label: 'Active Projects', value: '2', detail: 'You are collaborating on', icon: FolderKanban, tone: 'violet' },
@@ -174,11 +177,12 @@ function Dashboard({ role }: { role: UserRole }) {
                 <li key={personItem.name} className="flex items-center gap-2.5 py-2.5">
                   <UserAvatar name={personItem.name} tone={['rose', 'blue', 'amber'][index]} />
                   <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold text-slate-800">{admin ? ['MedScan Labs (Company)', 'Northstar Research', 'Dr. K. Mehta'][index] : personItem.name}</p><p className="truncate text-[9px] text-slate-500">{admin ? 'Organization verification' : personItem.role}</p></div>
-                  {admin ? <StatusBadge tone="amber">Review</StatusBadge> : <div className="flex gap-1"><MockAction onClick={() => setApplications((count) => Math.max(0, count - 1))}>View</MockAction><MockAction onClick={() => setApplications((count) => Math.max(0, count - 1))}>Approve</MockAction></div>}
+                  {admin ? <Link href="/admin/verification" className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">Review queue</Link> : <div className="flex items-center gap-1">{mentorDecisions[personItem.name] ? <StatusBadge tone={mentorDecisions[personItem.name] === 'Approved' ? 'emerald' : 'rose'}>{mentorDecisions[personItem.name]}</StatusBadge> : <><MockAction tone="neutral" onClick={() => setSelectedPerson(personItem.name)}>View</MockAction><MockAction onClick={() => { if (!window.confirm(`Approve ${personItem.name}'s request?`)) return; setMentorDecisions((current) => ({ ...current, [personItem.name]: 'Approved' })); setApplications((count) => Math.max(0, count - 1)); }}>Approve</MockAction></>}</div>}
                 </li>
               ))}
             </ul>
           )}
+          {selectedPerson && <div role="dialog" aria-label="Request details" className="mt-3 flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-[10px] text-indigo-900"><span>Sample request details for {selectedPerson}: awaiting mentor review.</span><button type="button" onClick={() => setSelectedPerson(null)} className="font-semibold underline">Close</button></div>}
           {mentor && <div className="mt-3 text-right"><StatusBadge tone="amber">{applications} pending approvals</StatusBadge></div>}
         </Panel>
         <Panel title={student ? 'Notifications' : admin ? 'Recent Audit Activity' : mentor ? 'Recent Reviews' : sponsor ? 'Recent Applications' : 'Recent Research Activity'} action={<TextLink href={student ? '/student/messages' : `/${role.toLowerCase()}/messages`}>View all</TextLink>}>
@@ -279,6 +283,7 @@ function ProjectListing({ role }: { role: UserRole }) {
 }
 
 function AIWorkspace() {
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const agents = [
     ['Research Agent', 'Finds relevant literature and evidence', 'Ready', Microscope],
     ['Analysis Agent', 'Summarizes datasets and research patterns', 'Ready', BrainCircuit],
@@ -294,7 +299,7 @@ function AIWorkspace() {
         <StatusBadge tone="amber">UI only · No agents running</StatusBadge>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {agents.map(([name, detail, status, Icon]) => <article key={name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between"><span className="flex size-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700"><Icon className="size-4" aria-hidden="true" /></span><StatusBadge tone="emerald">{status}</StatusBadge></div><h2 className="mt-3 text-xs font-bold text-slate-900">{name}</h2><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-500">{detail}</p><MockAction tone="neutral">View capabilities</MockAction></article>)}
+        {agents.map(([name, detail, status, Icon]) => <article key={name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between"><span className="flex size-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700"><Icon className="size-4" aria-hidden="true" /></span><StatusBadge tone="emerald">{status}</StatusBadge></div><h2 className="mt-3 text-xs font-bold text-slate-900">{name}</h2><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-500">{detail}</p><MockAction tone="neutral" onClick={() => setSelectedAgent(selectedAgent === name ? null : name)}>{selectedAgent === name ? 'Hide capabilities' : 'View capabilities'}</MockAction>{selectedAgent === name && <p role="status" className="mt-3 rounded-lg bg-indigo-50 p-2 text-[9px] leading-4 text-indigo-900">{name} can help organize research evidence and generate suggestions. This is a UI-only demo; no agent is invoked.</p>}</article>)}
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Recent AI reports"><ActivityFeed items={[
@@ -311,13 +316,13 @@ function AIWorkspace() {
 }
 
 function SkillsPage({ role = 'STUDENT' }: { role?: UserRole }) {
-  const [testStarted, setTestStarted] = useState(false);
+  const [verification, setVerification] = useDemoState<Record<string, string>>('skill-verification', {});
   const matching = role === 'MENTOR';
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <PageIntro eyebrow="Skills & growth" title={matching ? 'Skills & Matching' : 'My Skills'} description={matching ? 'Compare researcher skill profiles with active project needs. Matching suggestions are illustrative and do not run through an AI service.' : 'A transparent view of skills, self-assessments, and mentor review. Verification shown here is sample data only.'} action={!matching && <MockAction onClick={() => setTestStarted(true)}><Plus className="mr-1 inline size-3" /> Start a skill test</MockAction>} />
-      {testStarted && <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">Sample skill test started: Computer Vision · 20 minutes. No assessment is being scored.</div>}
-      {matching ? <div className="grid gap-3 md:grid-cols-2">{demoPeople.map((person) => <article key={person.name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-3"><UserAvatar name={person.name} tone="blue" size="size-10" /><div><h2 className="text-xs font-bold text-slate-900">{person.name}</h2><p className="text-[10px] text-slate-500">{person.role}</p></div><StatusBadge tone="emerald">{person.status}</StatusBadge></div><div className="mt-3 flex flex-wrap gap-1.5">{person.skills.map((skill) => <StatusBadge key={skill} tone="blue">{skill}</StatusBadge>)}</div><p className="mt-3 text-[9px] text-slate-500">Suggested for AI for Medical Image Analysis · sample match</p></article>)}</div> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{demoSkills.map((skill) => <article key={skill.name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between gap-2"><h2 className="text-xs font-bold text-slate-900">{skill.name}</h2><StatusBadge tone={skill.status === 'Verified' ? 'emerald' : 'amber'}>{skill.status}</StatusBadge></div><p className="mt-2 text-[10px] text-slate-500">{skill.detail}</p>{skill.score > 0 && <div className="mt-3"><ProgressBar value={skill.score} label="Assessment score" /></div>}<div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3"><span className="text-[9px] text-slate-500">AI Mesh analysis · illustrative</span><span className="text-[10px] font-semibold tabular-nums text-slate-700">{skill.score ? `${skill.score}%` : 'Not tested'}</span></div></article>)}</div>}
+      <PageIntro eyebrow="Skills & growth" title={matching ? 'Skills & Matching' : 'My Skills'} description={matching ? 'Compare researcher skill profiles with active project needs. Matching suggestions are illustrative and do not run through an AI service.' : 'A transparent view of skills, self-assessments, and mentor review. Verification shown here is sample data only.'} action={!matching && <MockAction onClick={() => setVerification((current) => ({ ...current, started: 'true', 'Computer Vision': 'In progress' }))}><Plus className="mr-1 inline size-3" /> Start a skill test</MockAction>} />
+      {verification.started && <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">Sample skill verification started. Your progress is saved in this browser.</div>}
+      {matching ? <div className="grid gap-3 md:grid-cols-2">{demoPeople.map((person) => <article key={person.name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-3"><UserAvatar name={person.name} tone="blue" size="size-10" /><div><h2 className="text-xs font-bold text-slate-900">{person.name}</h2><p className="text-[10px] text-slate-500">{person.role}</p></div><StatusBadge tone="emerald">{person.status}</StatusBadge></div><div className="mt-3 flex flex-wrap gap-1.5">{person.skills.map((skill) => <StatusBadge key={skill} tone="blue">{skill}</StatusBadge>)}</div><p className="mt-3 text-[9px] text-slate-500">Suggested for AI for Medical Image Analysis · sample match</p></article>)}</div> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{demoSkills.map((skill) => { const status = verification[skill.name] ?? skill.status; return <article key={skill.name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between gap-2"><h2 className="text-xs font-bold text-slate-900">{skill.name}</h2><StatusBadge tone={status === 'Verified' ? 'emerald' : 'amber'}>{status}</StatusBadge></div><p className="mt-2 text-[10px] text-slate-500">{skill.detail}</p>{skill.score > 0 && <div className="mt-3"><ProgressBar value={skill.score} label="Assessment score" /></div>}<div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3"><span className="text-[9px] text-slate-500">AI Mesh analysis · illustrative</span><span className="text-[10px] font-semibold tabular-nums text-slate-700">{skill.score ? `${skill.score}%` : 'Not tested'}</span></div><button type="button" disabled={status === 'Verified' || status === 'In progress'} onClick={() => setVerification((current) => ({ ...current, [skill.name]: 'In progress', started: 'true' }))} className="mt-3 w-full rounded-lg border border-indigo-200 px-3 py-2 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">{status === 'Verified' ? 'Verified' : status === 'In progress' ? 'Verification started' : 'Start verification'}</button></article>; })}</div>}
     </div>
   );
 }
@@ -325,6 +330,7 @@ function SkillsPage({ role = 'STUDENT' }: { role?: UserRole }) {
 function StudentProjects() {
   const [filter, setFilter] = useState('All Projects');
   const [query, setQuery] = useState('');
+  const [joinedProjects, setJoinedProjects] = useDemoState<string[]>('joined-projects', []);
   const tabs = ['All Projects', 'Active', 'Recruiting', 'Planning'];
   const filtered = demoProjects.filter((project) => {
     const textMatch = `${project.title} ${project.sponsor} ${project.domain}`.toLowerCase().includes(query.toLowerCase());
@@ -341,7 +347,7 @@ function StudentProjects() {
         <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Filter projects">{tabs.map((tab) => <button key={tab} type="button" role="tab" aria-selected={filter === tab} onClick={() => setFilter(tab)} className={cn('shrink-0 rounded-lg px-3 py-2 text-[10px] font-semibold', filter === tab ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100')}>{tab}</button>)}</div>
         <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 sm:w-64"><Search className="size-3.5 text-slate-400" aria-hidden="true" /><span className="sr-only">Search projects</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full text-[10px] outline-none" placeholder="Search projects..." /></label>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{filtered.map((project) => <ProjectCard key={project.id} project={project} href={projectPath(project.id)} />)}</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{filtered.map((project) => <article key={project.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><ProjectCard project={project} href={projectPath(project.id)} /><button type="button" disabled={joinedProjects.includes(project.id)} onClick={() => { if (window.confirm(`Request to join ${project.title}?`)) joinedProjects.includes(project.id) || setJoinedProjects((current) => [...current, project.id]); }} className="mt-2 w-full rounded-lg border border-indigo-200 px-3 py-2 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 disabled:text-emerald-700">{joinedProjects.includes(project.id) ? 'Join request submitted' : 'Request to join'}</button></article>)}</div>
       {filtered.length === 0 && <EmptyState title="No projects match this view" description="Change the filter or search for another research area." action={<MockAction tone="neutral" onClick={() => { setFilter('All Projects'); setQuery(''); }}>Show all projects</MockAction>} />}
     </div>
   );
@@ -350,7 +356,7 @@ function StudentProjects() {
 function StudentMyWork() {
   const [filter, setFilter] = useState('All Tasks');
   const [projectFilter, setProjectFilter] = useState('All Projects');
-  const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const [statuses, setStatuses] = useDemoState<Record<string, string>>('task-statuses', {});
   const tabs = ['All Tasks', 'In Progress', 'Completed', 'Drafts'];
   const tasks = demoStudentTasks.filter((task) => {
     const status = statuses[task.id] ?? task.status;
@@ -414,6 +420,32 @@ function StudentAIWorkspace() {
 function StudentContributions() {
   const [period, setPeriod] = useState('This Year');
   const [detail, setDetail] = useState('');
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftProject, setDraftProject] = useState(demoProjects[0].title);
+  const [contributions, setContributions] = useDemoState('student-contributions', demoContributions);
+  const saveDraft = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = draftTitle.trim();
+    if (!title) {
+      setDetail('Add a contribution title before saving.');
+      return;
+    }
+    setContributions((current) => [{
+      id: `demo-contribution-${Date.now()}`,
+      title,
+      project: draftProject,
+      type: 'Research',
+      submitted: new Date().toLocaleDateString(),
+      status: 'Draft',
+      credits: null,
+      suggestedCredits: null,
+      reviewer: 'Not submitted',
+    }, ...current]);
+    setDetail(`“${title}” was saved as a draft.`);
+    setDraftTitle('');
+    setShowNewForm(false);
+  };
   const chart = [
     { month: 'Jan', verified: 2, pending: 1 }, { month: 'Feb', verified: 3, pending: 1 },
     { month: 'Mar', verified: 4, pending: 2 }, { month: 'Apr', verified: 3, pending: 1 },
@@ -421,14 +453,15 @@ function StudentContributions() {
   ];
   return (
     <div className="mx-auto max-w-[1500px] space-y-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <PageIntro eyebrow="Student workspace" title="Contributions" description="Track your research contributions, submissions, and verified impact." action={<MockAction onClick={() => setDetail('New contribution draft opened in this local preview.')}><Plus className="mr-1 inline size-3" /> New Contribution</MockAction>} />
+      <PageIntro eyebrow="Student workspace" title="Contributions" description="Track your research contributions, submissions, and verified impact." action={<MockAction onClick={() => setShowNewForm((show) => !show)}><Plus className="mr-1 inline size-3" /> {showNewForm ? 'Close form' : 'New Contribution'}</MockAction>} />
       {detail && <div role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[10px] text-indigo-800">{detail}</div>}
+      {showNewForm && <form onSubmit={saveDraft} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="text-[10px] font-semibold text-slate-700">Contribution title<input required value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Describe your work" /></label><label className="text-[10px] font-semibold text-slate-700">Project<select value={draftProject} onChange={(event) => setDraftProject(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">{demoProjects.map((project) => <option key={project.id}>{project.title}</option>)}</select></label><button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-semibold text-white hover:bg-indigo-700">Save draft</button></form>}
       <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Total Contributions" value="18" detail="Across 2 projects" icon={FileCheck2} tone="blue" /><StatCard label="Verified" value="12" detail="Reviewed by mentors" icon={CheckCheck} tone="emerald" /><StatCard label="Pending Review" value="3" detail="Awaiting mentor feedback" icon={FileClock} tone="amber" /><StatCard label="Credits Earned" value="420" detail="Recognized contributions" icon={Coins} tone="violet" /></section>
       <Panel title="Contribution Overview" action={<select aria-label="Contribution period" value={period} onChange={(event) => setPeriod(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[9px]"><option>This Year</option><option>Last 6 Months</option><option>All Time</option></select>}>
         <div className="flex h-36 items-end justify-around gap-3 border-b border-slate-100 px-2 pt-4" role="img" aria-label={`Monthly contribution activity, ${period}`}>{chart.map((month) => <div key={month.month} className="flex h-full min-w-7 flex-1 flex-col items-center justify-end gap-1"><div className="flex h-24 items-end gap-1"><span className="w-3 rounded-t bg-indigo-500" style={{ height: `${month.verified * 16}px` }} /><span className="w-3 rounded-t bg-teal-300" style={{ height: `${month.pending * 16}px` }} /></div><span className="text-[9px] text-slate-500">{month.month}</span></div>)}</div>
         <div className="mt-2 flex gap-4 text-[9px] text-slate-500"><span><i className="mr-1 inline-block size-2 rounded-sm bg-indigo-500" />Verified</span><span><i className="mr-1 inline-block size-2 rounded-sm bg-teal-300" />Pending review</span></div>
       </Panel>
-      <Panel title="My Contributions" action={<span className="text-[9px] text-slate-500">4 records</span>}><ul className="divide-y divide-slate-100">{demoContributions.map((contribution) => <li key={contribution.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1.8fr)_0.8fr_0.9fr_0.7fr_0.7fr_0.6fr] md:items-center md:gap-3"><div className="flex min-w-0 items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><FileText className="size-4" aria-hidden="true" /></span><span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-slate-900">{contribution.title}</span><span className="block truncate text-[9px] text-slate-500">{contribution.project}</span></span></div><StatusBadge tone="blue">{contribution.type}</StatusBadge><span className="text-[9px] text-slate-500">{contribution.submitted}</span><StatusBadge tone={contribution.status === 'Verified' ? 'emerald' : contribution.status === 'Under Review' ? 'amber' : 'slate'}>{contribution.status}</StatusBadge><span className="text-[9px] text-slate-600">{contribution.credits ? `+${contribution.credits} credits` : `Suggested ${contribution.suggestedCredits ?? '—'}`}</span><button type="button" onClick={() => setDetail(`${contribution.title}: sample AI suggests ${contribution.suggestedCredits ?? 'no'} credits; mentor review is ${contribution.status === 'Verified' ? 'complete' : 'pending'}.`)} className="w-fit rounded-lg border border-slate-200 px-2 py-1.5 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50">View</button></li>)}</ul></Panel>
+      <Panel title="My Contributions" action={<span className="text-[9px] text-slate-500">{contributions.length} records</span>}><ul className="divide-y divide-slate-100">{contributions.map((contribution) => <li key={contribution.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1.8fr)_0.8fr_0.9fr_0.7fr_0.7fr_0.6fr] md:items-center md:gap-3"><div className="flex min-w-0 items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><FileText className="size-4" aria-hidden="true" /></span><span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-slate-900">{contribution.title}</span><span className="block truncate text-[9px] text-slate-500">{contribution.project}</span></span></div><StatusBadge tone="blue">{contribution.type}</StatusBadge><span className="text-[9px] text-slate-500">{contribution.submitted}</span><StatusBadge tone={contribution.status === 'Verified' ? 'emerald' : contribution.status === 'Under Review' ? 'amber' : 'slate'}>{contribution.status}</StatusBadge><span className="text-[9px] text-slate-600">{contribution.credits ? `+${contribution.credits} credits` : `Suggested ${contribution.suggestedCredits ?? '—'}`}</span><button type="button" onClick={() => setDetail(`${contribution.title}: sample AI suggests ${contribution.suggestedCredits ?? 'no'} credits; mentor review is ${contribution.status === 'Verified' ? 'complete' : 'pending'}.`)} className="w-fit rounded-lg border border-slate-200 px-2 py-1.5 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50">View</button></li>)}</ul></Panel>
       <p className="text-center text-[9px] text-slate-400">AI analysis and credit suggestions are illustrative. Final decisions require human review.</p>
     </div>
   );
@@ -436,20 +469,20 @@ function StudentContributions() {
 
 function StudentAccess() {
   const [filter, setFilter] = useState('My Access');
-  const [requests, setRequests] = useState(demoAccessRequests);
+  const [requests, setRequests] = useDemoState('student-access-requests', demoAccessRequests);
   const [notice, setNotice] = useState('');
-  const tabs = ['My Access', 'Pending (2)', 'Approved (2)', 'Rejected'];
+  const tabs = ['My Access', `Pending (${requests.filter((item) => item.status === 'Pending').length})`, `Approved (${requests.filter((item) => item.status === 'Approved').length})`, 'Rejected'];
   const visible = requests.filter((request) => filter === 'My Access'
     || (filter.startsWith('Pending') && request.status === 'Pending')
     || (filter.startsWith('Approved') && request.status === 'Approved')
     || (filter === 'Rejected' && request.status === 'Rejected'));
   return (
     <div className="mx-auto max-w-[1500px] space-y-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <PageIntro eyebrow="Student workspace" title="Access Requests" description="Manage access to project resources and datasets." action={<MockAction onClick={() => setNotice('Choose a project resource below to make an access request.')}><Plus className="mr-1 inline size-3" /> Request Access</MockAction>} />
+      <PageIntro eyebrow="Student workspace" title="Access Requests" description="Manage access to project resources and datasets." action={<a href="#available-resources" className="rounded-lg bg-indigo-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-indigo-700"><Plus className="mr-1 inline size-3" /> Request Access</a>} />
       {notice && <div role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[10px] text-indigo-800">{notice}</div>}
       <div className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm" role="tablist" aria-label="Filter access requests">{tabs.map((tab) => <button key={tab} role="tab" aria-selected={filter === tab} type="button" onClick={() => setFilter(tab)} className={cn('shrink-0 rounded-lg px-3 py-2 text-[10px] font-semibold', filter === tab ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100')}>{tab}</button>)}</div>
-      <Panel title="Project Resource Access" action={<span className="text-[9px] text-slate-500">{visible.length} requests</span>}>      <ul className="divide-y divide-slate-100">{visible.map((request) => <li key={request.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1.6fr)_0.65fr_0.7fr_0.75fr_0.8fr_0.55fr] md:items-center md:gap-3"><div className="min-w-0"><p className="truncate text-[10px] font-semibold text-slate-900">{request.name}</p><p className="truncate text-[9px] text-slate-500">{request.project}</p></div><span className="text-[9px] text-slate-600">{request.resource}</span><StatusBadge tone={request.status === 'Approved' ? 'emerald' : request.status === 'Rejected' ? 'rose' : 'amber'}>{request.status}</StatusBadge><span className="text-[9px] text-slate-500">{request.updated}</span><span className="truncate text-[9px] text-slate-500">Reviewed by {request.reviewer}</span>{request.status === 'Pending' ? <button type="button" onClick={() => { setRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: 'Cancelled' } : item)); setNotice(`${request.name} cancelled in local preview state.`); }} className="w-fit rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-slate-700">Cancel</button> : <button type="button" onClick={() => setNotice(`${request.name}: sample resource details are ready to view.`)} className="w-fit rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-slate-700">View</button>}</li>)}</ul></Panel>
-      <Panel title="Available Project Resources"><div className="grid gap-2 sm:grid-cols-2">{demoProjects.slice(0, 3).map((project) => <article key={project.id} className="rounded-lg border border-slate-100 p-3"><p className="text-[10px] font-semibold text-slate-900">{project.title}</p><p className="mt-1 text-[9px] text-slate-500">{project.domain} · {project.sponsor}</p><button type="button" onClick={() => setNotice(`Access request for ${project.title} saved in local preview state.`)} className="mt-2 text-[9px] font-semibold text-indigo-700 hover:underline">Request project access</button></article>)}</div></Panel>
+      <Panel title="Project Resource Access" action={<span className="text-[9px] text-slate-500">{visible.length} requests</span>}>      <ul className="divide-y divide-slate-100">{visible.map((request) => <li key={request.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1.6fr)_0.65fr_0.7fr_0.75fr_0.8fr_0.55fr] md:items-center md:gap-3"><div className="min-w-0"><p className="truncate text-[10px] font-semibold text-slate-900">{request.name}</p><p className="truncate text-[9px] text-slate-500">{request.project}</p></div><span className="text-[9px] text-slate-600">{request.resource}</span><StatusBadge tone={request.status === 'Approved' ? 'emerald' : request.status === 'Rejected' || request.status === 'Cancelled' ? 'rose' : 'amber'}>{request.status}</StatusBadge><span className="text-[9px] text-slate-500">{request.updated}</span><span className="truncate text-[9px] text-slate-500">Reviewed by {request.reviewer}</span>{request.status === 'Pending' ? <button type="button" onClick={() => { if (!window.confirm(`Cancel the access request for ${request.name}?`)) return; setRequests((current) => current.map((item) => item.id === request.id ? { ...item, status: 'Cancelled' } : item)); setNotice(`${request.name}'s request was cancelled.`); }} className="w-fit rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-slate-700">Cancel</button> : <button type="button" onClick={() => setNotice(`${request.name}: ${request.resource} for ${request.project} · ${request.status}.`)} className="w-fit rounded-lg border border-slate-200 px-2.5 py-1.5 text-[9px] font-semibold text-slate-700">View</button>}</li>)}</ul></Panel>
+      <div id="available-resources"><Panel title="Available Project Resources"><div className="grid gap-2 sm:grid-cols-2">{demoProjects.slice(0, 3).map((project) => { const pending = requests.some((request) => request.project === `For: ${project.title}` && request.status === 'Pending'); return <article key={project.id} className="rounded-lg border border-slate-100 p-3"><p className="text-[10px] font-semibold text-slate-900">{project.title}</p><p className="mt-1 text-[9px] text-slate-500">{project.domain} · {project.sponsor}</p><button type="button" disabled={pending} onClick={() => { const request = { id: `access-${project.id}-${Date.now()}`, name: 'Sharath Swaroop', project: `For: ${project.title}`, resource: 'Project access', status: 'Pending', updated: new Date().toLocaleDateString(), reviewer: project.sponsor }; setRequests((current) => [request, ...current]); setNotice(`Access request submitted for ${project.title}.`); }} className="mt-2 rounded-md border border-indigo-200 px-2.5 py-1.5 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50 disabled:text-emerald-700">{pending ? 'Request pending' : 'Request project access'}</button></article>; })}</div></Panel></div>
     </div>
   );
 }
@@ -489,6 +522,7 @@ function DataTable({ rows, headers }: { rows: { title: string; subtitle: string;
 
 function GenericRolePage({ role, section }: { role: UserRole; section: string }) {
   const [decision, setDecision] = useState<string | null>(null);
+  const [decisions, setDecisions] = useDemoState<Record<string, string>>(`decisions-${role.toLowerCase()}-${section}`, {});
   const title = titleCase(section);
   const projectRows = demoProjects.map((project) => ({ title: project.title, subtitle: `${project.domain} · ${project.sponsor}`, status: project.status, meta: `${project.progress}% complete` }));
   const peopleRows = demoPeople.map((person) => ({ title: person.name, subtitle: person.role, status: person.status, meta: person.skills.join(', ') }));
@@ -525,7 +559,7 @@ function GenericRolePage({ role, section }: { role: UserRole; section: string })
           {section === 'credits' || section === 'rewards' ? <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Available balance" value="420" detail="Sample credits" icon={Wallet} tone="violet" /><StatCard label="Pending review" value="180" detail="Awaiting mentor review" icon={FileClock} tone="amber" /><StatCard label="Awarded this cycle" value="1,260" detail="Across 4 contributions" icon={Award} tone="emerald" /></div> : null}
           {section === 'contributions' && <Panel title="AI Mesh Contribution Analysis"><div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3"><div className="flex items-center gap-2"><BrainCircuit className="size-4 text-indigo-700" aria-hidden="true" /><p className="text-[10px] font-bold text-slate-900">Contribution analysis · sample</p></div><p className="text-pretty mt-1 text-[10px] leading-4 text-slate-600">AI analysis suggests a preliminary award of 80 credits based on reproducibility and documentation. Mentor review remains the final decision.</p><div className="mt-2 flex gap-2"><StatusBadge tone="violet">Suggested: 80 credits</StatusBadge><StatusBadge tone="amber">Mentor review pending</StatusBadge></div></div><DataTable rows={rows} headers={['Contribution', 'Review status', 'Suggested credits', 'Project']} /></Panel>}
           {section === 'verification' && <Panel title="Organization and skill verification queue"><DataTable rows={[{ title: 'MedScan Labs', subtitle: 'Organization verification · submitted Oct 4', status: 'Pending review', meta: 'Private documents' }, { title: 'Python · Sharath Swaroop', subtitle: 'Skill test · score 92%', status: 'Verified', meta: 'AI analysis + mentor review' }, { title: 'Computer Vision · Priya Nair', subtitle: 'Skill test · assessment completed', status: 'Pending review', meta: 'Mentor review' }]} /></Panel>}
-          {isAccess && <Panel title="Requests and approvals"><div className="space-y-3">{accessRows.map((row) => <article key={row.title} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3"><div className="min-w-0"><p className="text-[10px] font-semibold text-slate-900">{row.title}</p><p className="mt-1 text-[9px] text-slate-500">{row.subtitle} · {row.meta}</p><StatusBadge tone={row.status === 'Approved' ? 'emerald' : 'amber'}>{decision && row.status === 'Pending review' ? 'Approved' : row.status}</StatusBadge></div>{row.status === 'Pending review' && <div className="flex gap-2"><MockAction tone="neutral" onClick={() => setDecision('Request rejected in local preview state.')}>Reject</MockAction><MockAction onClick={() => setDecision('Request approved in local preview state.')}>Approve</MockAction></div>}</article>)}</div><p className="mt-3 text-[9px] text-slate-500">Demo workflow: sponsor reviews researcher applications; mentors review access and contributor requests. Decisions are local UI state only.</p></Panel>}
+          {isAccess && <Panel title="Requests and approvals"><div className="space-y-3">{accessRows.map((row) => { const status = decisions[row.title] ?? row.status; const canDecide = ['SPONSOR', 'MENTOR', 'ADMIN'].includes(role); return <article key={row.title} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3"><div className="min-w-0"><p className="text-[10px] font-semibold text-slate-900">{row.title}</p><p className="mt-1 text-[9px] text-slate-500">{row.subtitle} · {row.meta}</p><StatusBadge tone={status === 'Approved' ? 'emerald' : status === 'Rejected' ? 'rose' : 'amber'}>{status}</StatusBadge></div>{status === 'Pending review' && canDecide && <div className="flex gap-2"><MockAction tone="neutral" onClick={() => { if (!window.confirm(`Reject ${row.title}?`)) return; setDecisions((current) => ({ ...current, [row.title]: 'Rejected' })); setDecision(`${row.title} was rejected in this demo.`); }}>Reject</MockAction><MockAction onClick={() => { if (!window.confirm(`Approve ${row.title}?`)) return; setDecisions((current) => ({ ...current, [row.title]: 'Approved' })); setDecision(`${row.title} was approved in this demo.`); }}>Approve</MockAction></div>}</article>; })}</div><p className="mt-3 text-[9px] text-slate-500">Demo workflow decisions are stored locally in this browser and do not affect live records.</p></Panel>}
           {!isApplication && section !== 'credits' && section !== 'rewards' && section !== 'contributions' && section !== 'verification' && !isAccess && (
             <Panel title={section === 'team' ? 'Project collaborators' : section === 'skills' ? 'Skills and matching' : section === 'reports' ? 'Research reports' : section === 'audit' ? 'Recent audit activity' : title}>
               <DataTable rows={rows} />
@@ -555,9 +589,31 @@ function pageDescription(role: UserRole, section: string) {
   return `A shared ${titleCase(section).toLowerCase()} workspace for ${roleName(role).toLowerCase()}s. Explore sample project data and common research workflows.`;
 }
 
+function DemoNotifications({ role }: { role: UserRole }) {
+  const [read, setRead] = useDemoState<string[]>('notification-read', []);
+  return (
+    <div className="mx-auto max-w-[1100px] space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+      <PageIntro eyebrow={roleName(role)} title="Notifications" description="Updates from your research workspace. Read status is saved locally for this demo." action={<button type="button" onClick={() => { setRead(demoNotifications.map((item) => item.title)); window.dispatchEvent(new Event('gardenia:notifications-updated')); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50">Mark all as read</button>} />
+      <Panel title="Recent notifications" action={<StatusBadge tone="blue">{demoNotifications.length - read.length} unread</StatusBadge>}>
+        <ul className="divide-y divide-slate-100">{demoNotifications.map((item) => {
+          const isRead = read.includes(item.title);
+          return <li key={item.title} className="flex items-start gap-3 py-3">
+            <span className={cn('mt-1 size-2 shrink-0 rounded-full', isRead ? 'bg-slate-300' : 'bg-indigo-600')} aria-hidden="true" />
+            <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-[9px] text-slate-500">{item.detail} · {item.time}</p></div>
+            {!isRead && <button type="button" onClick={() => { setRead((current) => [...current, item.title]); window.dispatchEvent(new Event('gardenia:notifications-updated')); }} className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-semibold text-indigo-700 hover:bg-indigo-50">Mark read</button>}
+            {isRead && <StatusBadge tone="slate">Read</StatusBadge>}
+          </li>;
+        })}</ul>
+      </Panel>
+    </div>
+  );
+}
+
 function ProjectWorkspace({ id, section }: { id: string; section: string }) {
-  const [accessRequested, setAccessRequested] = useState(false);
+  const { currentRole } = useRole();
+  const [accessRequests, setAccessRequests] = useDemoState<{ projectId: string; resource: string; reason: string; status: string }[]>('project-access-requests', []);
   const project = demoProjects.find((item) => item.id === id) ?? demoProjects[0];
+  const accessRequested = accessRequests.some((request) => request.projectId === project.id && request.status === 'Pending');
   const activeSection = projectSections.some(([, path]) => path === section) ? section : 'overview';
   const title = project.title;
   const navLinks = projectSections;
@@ -580,7 +636,20 @@ function ProjectWorkspace({ id, section }: { id: string; section: string }) {
         <div className="mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
           <nav aria-label="Project subsection navigation" className="hidden gap-1 overflow-x-auto border-b border-slate-800 pb-2 lg:flex">{[['Overview', 'overview'], ['Team', 'team'], ['Milestones', 'milestones'], ['Resources', 'evidence']].map(([label, path]) => <Link key={label} href={projectPath(project.id, path)} className={cn('shrink-0 rounded px-3 py-2 text-[10px]', activeSection === path ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white')}>{label}</Link>)}</nav>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_17rem]">
-            <ProjectSectionContent project={project} section={activeSection} accessRequested={accessRequested} onRequestAccess={() => setAccessRequested(true)} />
+            <ProjectSectionContent
+              project={project}
+              role={currentRole}
+              section={activeSection}
+              accessRequested={accessRequested}
+              accessRequests={accessRequests.filter((request) => request.projectId === project.id)}
+              onRequestAccess={(resource, reason) => setAccessRequests((current) => [...current, { projectId: project.id, resource, reason, status: 'Pending' }])}
+              onDecideAccess={(resource, status) => {
+                if (!window.confirm(`${status} access to ${resource}?`)) return;
+                setAccessRequests((current) => current.map((request) => request.projectId === project.id && request.resource === resource
+                  ? { ...request, status }
+                  : request));
+              }}
+            />
             <aside className="space-y-4">
               {activeSection === 'overview' && <section className="rounded-xl border border-slate-800 bg-slate-900 p-4"><h2 className="text-xs font-bold text-white">Quick Actions</h2><div className="mt-3 grid gap-2">{[['View Charter', 'charter'], ['Request Access', 'access'], ['Open AI Workspace', 'ai-workspace'], ['Submit Deliverable', 'contributions']].map(([label, path]) => <Link key={path} href={projectPath(project.id, path)} className="flex items-center justify-between rounded-lg bg-slate-800 px-3 py-2.5 text-[10px] font-semibold text-slate-100 hover:bg-indigo-700">{label}<ArrowRight className="size-3" aria-hidden="true" /></Link>)}</div></section>}
               <section className="rounded-xl border border-slate-800 bg-slate-900 p-4"><div className="flex items-center justify-between"><h2 className="text-xs font-bold text-white">Project Team</h2><Link href={projectPath(project.id, 'team')} className="text-[9px] text-indigo-300">View all</Link></div><ul className="mt-3 space-y-3">{demoPeople.slice(0, 3).map((person) => <li key={person.name} className="flex items-center gap-2"><UserAvatar name={person.name} tone="indigo" /><div><p className="text-[10px] font-semibold text-slate-200">{person.name}</p><p className="text-[9px] text-slate-500">{person.role}</p></div></li>)}</ul></section>
@@ -596,18 +665,27 @@ function ProjectWorkspace({ id, section }: { id: string; section: string }) {
 
 function ProjectSectionContent({
   project,
+  role,
   section,
   accessRequested,
+  accessRequests,
   onRequestAccess,
+  onDecideAccess,
 }: {
   project: (typeof demoProjects)[number];
+  role: UserRole;
   section: string;
   accessRequested: boolean;
-  onRequestAccess: () => void;
+  accessRequests: { resource: string; reason: string; status: string }[];
+  onRequestAccess: (resource: string, reason: string) => void;
+  onDecideAccess: (resource: string, status: 'Approved' | 'Rejected') => void;
 }) {
+  const [resource, setResource] = useState('Research dataset v2');
+  const [reason, setReason] = useState('');
+  const [requestError, setRequestError] = useState('');
   const shellClass = 'rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm';
   if (section === 'ai-workspace') return <AIWorkspace />;
-  if (section === 'access') return <section className="rounded-xl border border-indigo-900 bg-indigo-950/60 p-4"><p className="text-xs font-bold text-white">Request project access</p><p className="text-pretty mt-1 text-[10px] text-slate-300">Choose a resource scope and explain how it supports your research work.</p><label className="mt-3 block text-[10px] font-medium text-slate-300">Resource scope<select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option>Research dataset v2</option><option>Implementation workspace</option><option>Project charter</option></select></label><label className="mt-3 block text-[10px] font-medium text-slate-300">Reason<textarea className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" placeholder="Describe how access supports your work." /></label><MockAction onClick={onRequestAccess}>{accessRequested ? 'Access request sent' : 'Submit access request'}</MockAction>{accessRequested && <p className="mt-2 text-[10px] text-emerald-300" role="status">Your sample request is waiting for a sponsor or mentor decision.</p>}</section>;
+  if (section === 'access') return <section className="rounded-xl border border-indigo-900 bg-indigo-950/60 p-4"><p className="text-xs font-bold text-white">{role === 'SPONSOR' || role === 'MENTOR' ? 'Project access requests' : 'Request project access'}</p>{role === 'SPONSOR' || role === 'MENTOR' ? <ul className="mt-3 space-y-2">{accessRequests.length ? accessRequests.map((request) => <li key={`${request.resource}-${request.reason}`} className="rounded-lg border border-slate-700 p-3"><p className="text-[10px] font-semibold text-white">{request.resource} · {request.status}</p><p className="mt-1 text-[9px] text-slate-300">{request.reason}</p>{request.status === 'Pending' && <div className="mt-2 flex gap-2"><MockAction tone="neutral" onClick={() => onDecideAccess(request.resource, 'Rejected')}>Reject</MockAction><MockAction onClick={() => onDecideAccess(request.resource, 'Approved')}>Approve</MockAction></div>}</li>) : <li className="text-[10px] text-slate-300">No demo requests have been submitted yet.</li>}</ul> : role === 'ADMIN' ? <p className="mt-2 text-[10px] text-slate-300">Access decisions are managed by the project sponsor or mentor.</p> : <><p className="text-pretty mt-1 text-[10px] text-slate-300">Choose a resource scope and explain how it supports your research work.</p><label className="mt-3 block text-[10px] font-medium text-slate-300">Resource scope<select disabled={accessRequested} value={resource} onChange={(event) => setResource(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"><option>Research dataset v2</option><option>Implementation workspace</option><option>Project charter</option></select></label><label className="mt-3 block text-[10px] font-medium text-slate-300">Reason<textarea disabled={accessRequested} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" placeholder="Describe how access supports your work." /></label>{requestError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{requestError}</p>}<MockAction disabled={accessRequested} onClick={() => { if (!reason.trim()) { setRequestError('Explain why this resource is needed before submitting.'); return; } onRequestAccess(resource, reason.trim()); setRequestError(''); }}>{accessRequested ? 'Access request sent' : 'Submit access request'}</MockAction>{accessRequested && <p className="mt-2 text-[10px] text-emerald-300" role="status">Your sample request is waiting for a sponsor or mentor decision.</p>}</>}</section>;
   if (section === 'overview') return <div className="space-y-4"><section className={shellClass}><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-bold text-white">Problem Statement</h2><p className="text-pretty mt-2 max-w-3xl text-[10px] leading-5 text-slate-300">{project.summary}</p></div><span className="flex size-24 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-2xl" aria-label="Research lab illustration">🔬</span></div><div className="mt-4 grid gap-2 sm:grid-cols-4">{[['Domain', project.domain], ['Type', 'Research + Implementation'], ['Timeline', '3 months'], ['Reward', project.reward]].map(([label, value]) => <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-2"><p className="text-[8px] text-slate-500">{label}</p><p className="mt-1 text-[9px] font-semibold text-slate-200">{value}</p></div>)}</div><div className="mt-4"><ProgressBar value={project.progress} label="Project progress" tone="violet" /></div></section><DocumentsPanel /><ActivityPanel /></div>;
   if (section === 'charter') return <section className={shellClass}><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-white">Project Charter · Version 2</h2><StatusBadge tone="emerald">Approved</StatusBadge></div><p className="text-pretty mt-3 text-xs leading-5 text-slate-300">Establish a reproducible research workflow to evaluate {project.domain.toLowerCase()} methods, document limitations, and share evidence with the project team.</p><dl className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Research objectives</dt><dd className="mt-1 text-[10px] text-slate-200">Replicable methods, transparent evaluation, accessible findings.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Contribution policy</dt><dd className="mt-1 text-[10px] text-slate-200">Human-reviewed evidence and documented author contributions.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Data governance</dt><dd className="mt-1 text-[10px] text-slate-200">Approved project resources only; no sensitive data in public reports.</dd></div><div className="rounded-lg bg-slate-950 p-3"><dt className="text-[9px] text-slate-500">Last review</dt><dd className="mt-1 text-[10px] text-slate-200">Oct 3 · Dr. Ananya Rao</dd></div></dl><div className="mt-4"><DocumentCard title="Project Charter v2.pdf" kind="Approved · 420 KB" access="Team" /></div></section>;
   if (section === 'team') return <section className={shellClass}><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-white">Project Team</h2><StatusBadge tone="blue">{project.members} collaborators</StatusBadge></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{demoPeople.map((person) => <article key={person.name} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3"><UserAvatar name={person.name} tone="indigo" size="size-9" /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold text-slate-100">{person.name}</p><p className="text-[9px] text-slate-500">{person.role}</p></div><span className="text-right text-[9px] text-slate-400">{person.skills.join(' · ')}</span></article>)}</div><div className="mt-4 rounded-lg border border-slate-800 p-3"><p className="text-[10px] font-semibold text-slate-200">Request a mentor</p><p className="mt-1 text-[9px] text-slate-500">Ask for research guidance from an experienced mentor.</p><Link href="/researcher/access" className="mt-2 inline-flex items-center gap-1 text-[9px] font-semibold text-indigo-300">Request mentor access <ArrowRight className="size-3" aria-hidden="true" /></Link></div></section>;
@@ -667,6 +745,7 @@ export function RoleScreen({ segments }: { segments: string[] }) {
         ? 'access-requests'
         : roleSection;
   const isDashboard = selectedSection === '' || selectedSection === 'dashboard';
+  if (selectedSection === 'notifications') return <DemoNotifications role={role} />;
   if (role === 'STUDENT') {
     if (isDashboard) return <StudentDashboard />;
     if (selectedSection === 'projects') return <StudentProjects />;

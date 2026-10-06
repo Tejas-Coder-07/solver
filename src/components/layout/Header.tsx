@@ -8,7 +8,7 @@ import { useRole } from '@/context/RoleContext';
 import { cn } from '@/lib/cn';
 import { getWorkspaceRole, portalNavigation } from '@/lib/portal-nav';
 import type { UserRole } from '@/types';
-import { demoPeople, demoProjects, demoStudentTasks } from '@/lib/mock-data';
+import { demoNotifications, demoPeople, demoProjects, demoStudentTasks } from '@/lib/mock-data';
 
 type HeaderProps = {
   dark: boolean;
@@ -37,8 +37,14 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
     let active = true;
     const loadUnread = async () => {
       if (isDemo) {
-        setUnreadCount(3);
-        setNotificationError(false);
+        try {
+          const saved = window.localStorage.getItem('gardenia-demo:notification-read');
+          const readItems = saved ? JSON.parse(saved) as string[] : [];
+          setUnreadCount(demoNotifications.filter((item) => !readItems.includes(item.title)).length);
+          setNotificationError(false);
+        } catch {
+          setNotificationError(true);
+        }
         return;
       }
       try {
@@ -101,19 +107,18 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
     }
 
     if (isDemo) {
-      const term = query.trim().toLowerCase();
       const results = [
-        ...demoProjects.filter((project) => `${project.title} ${project.domain} ${project.sponsor}`.toLowerCase().includes(term).map((project) => ({
+        ...demoProjects.filter((project) => `${project.title} ${project.domain} ${project.sponsor}`.toLowerCase().includes(term)).map((project) => ({
           kind: 'project',
           label: project.title,
           href: `/projects/${project.id}`,
         })),
-        ...demoPeople.filter((person) => `${person.name} ${person.role} ${person.skills.join(' ')}`.toLowerCase().includes(term).map((person) => ({
+        ...demoPeople.filter((person) => `${person.name} ${person.role} ${person.skills.join(' ')}`.toLowerCase().includes(term)).map((person) => ({
           kind: person.role.toLowerCase(),
           label: person.name,
           href: `/${workspaceRole.toLowerCase()}/team`,
         })),
-        ...demoStudentTasks.filter((task) => `${task.title} ${task.project}`.toLowerCase().includes(term).map((task) => ({
+        ...demoStudentTasks.filter((task) => `${task.title} ${task.project}`.toLowerCase().includes(term)).map((task) => ({
           kind: 'task',
           label: task.title,
           href: '/student/my-work',
@@ -215,7 +220,7 @@ export function Header({ dark, onToggleTheme }: HeaderProps) {
           type="button"
           aria-label={`Notifications${notificationError ? ', count unavailable' : unreadCount ? `, ${unreadCount} unread` : ''}`}
           title={notificationError ? 'Unread notification count unavailable' : undefined}
-          onClick={() => router.push('/notifications')}
+          onClick={() => router.push(`${roleHome}/notifications`)}
           className={iconButton}
         >
           <Bell className="size-4" aria-hidden="true" />

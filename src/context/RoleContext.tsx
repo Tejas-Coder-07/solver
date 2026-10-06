@@ -124,14 +124,21 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             if (!demoResponse.ok) throw new Error(demoResult.error ?? 'Unable to load the demo session.');
             const demoSession = demoResult.session as { email: string; role: UserRole } | null;
             if (active && demoSession) {
+              let savedProfile: Partial<SessionProfile> = {};
+              try {
+                const saved = window.localStorage.getItem(`gardenia-demo:profile:${demoSession.email}`);
+                if (saved) savedProfile = JSON.parse(saved) as Partial<SessionProfile>;
+              } catch (storageError) {
+                throw new Error(`Demo profile could not be restored: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
+              }
               setCurrentUser({
                 id: `demo:${demoSession.email}`,
-                name: demoSession.email.split('@')[0],
+                name: savedProfile.name ?? demoSession.email.split('@')[0],
                 email: demoSession.email,
                 role: demoSession.role,
-                avatar: '',
-                institution: '',
-                bio: 'Demo preview account. Actions do not change protected database records.',
+                avatar: savedProfile.avatar ?? '',
+                institution: savedProfile.institution ?? '',
+                bio: savedProfile.bio ?? 'Demo preview account. Actions do not change protected database records.',
               });
               setError(null);
               setLoading(false);
@@ -152,8 +159,19 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       };
       void initialize();
       const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-        window.setTimeout(() => {
-          if (active) void loadProfile(session?.user ? { id: session.user.id, email: session.user.email } : null);
+        window.setTimeout(async () => {
+          if (!active) return;
+          if (process.env.NODE_ENV === 'development' && !session?.user) {
+            const response = await fetch('/api/demo/session', { cache: 'no-store' });
+            const result = await response.json();
+            if (!response.ok) {
+              setError(result.error ?? 'Unable to validate the demo session.');
+              setLoading(false);
+              return;
+            }
+            if (result.session) return;
+          }
+          await loadProfile(session?.user ? { id: session.user.id, email: session.user.email } : null);
         }, 0);
       });
       unsubscribe = () => listener.subscription.unsubscribe();
@@ -170,6 +188,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const saveProfile = useCallback(async (profile: ProfileUpdate) => {
     if (!currentUser.id) throw new Error('Sign in before updating your profile.');
+    if (currentUser.id.startsWith('demo:')) {
+      const nextProfile = {
+        ...currentUser,
+        name: profile.full_name,
+        institution: profile.institution ?? '',
+        bio: profile.bio ?? '',
+      };
+      try {
+        window.localStorage.setItem(`gardenia-demo:profile:${currentUser.email}`, JSON.stringify(nextProfile));
+      } catch (storageError) {
+        throw new Error(`Demo profile could not be saved locally: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
+      }
+      setCurrentUser(nextProfile);
+      notify('Changes saved in this demo session.');
+      return;
+    }
     const supabase = createSupabaseBrowserClient();
     const { data, error: updateError } = await supabase
       .from('profiles')
@@ -192,7 +226,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       bio: data.bio ?? '',
       avatar: data.avatar_path ?? '',
     }));
-  }, [currentUser.id]);
+  }, [currentUser, notify]);
 
   const signOut = useCallback(async () => {
     if (currentUser.id.startsWith('demo:')) {
