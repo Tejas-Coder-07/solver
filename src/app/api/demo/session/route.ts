@@ -9,10 +9,6 @@ function isDemoRole(value: unknown): value is UserRole {
 }
 
 export async function GET(request: NextRequest) {
-  if (process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Demo preview is available only in development.' }, { status: 404 });
-  }
-
   const value = request.cookies.get(cookieName)?.value;
   const separator = value?.indexOf('|') ?? -1;
   if (!value || separator < 0) return NextResponse.json({ session: null });
@@ -30,10 +26,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Demo preview is available only in development.' }, { status: 404 });
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -52,7 +44,7 @@ export async function POST(request: NextRequest) {
   response.cookies.set(cookieName, `${role}|${encodeURIComponent(email.trim())}`, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 8,
   });
@@ -60,11 +52,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE() {
-  if (process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Demo preview is available only in development.' }, { status: 404 });
-  }
   const response = NextResponse.json({ session: null });
-  response.cookies.set(cookieName, '', { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: 0 });
+  response.cookies.set(cookieName, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  });
   return response;
 }
 

@@ -116,41 +116,39 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
     const initialize = async () => {
       try {
-        if (process.env.NODE_ENV === 'development') {
-          const demoResponse = await fetch('/api/demo/session', { cache: 'no-store' });
-          const demoResult = await demoResponse.json();
-          if (!demoResponse.ok) throw new Error(demoResult.error ?? 'Unable to load the demo session.');
-          const demoSession = demoResult.session as { email: string; role: UserRole } | null;
-          if (active && demoSession) {
-            let savedProfile: Partial<SessionProfile> = {};
-            try {
-              const saved = window.localStorage.getItem(`gardenia-demo:profile:${demoSession.email}`);
-              if (saved) savedProfile = JSON.parse(saved) as Partial<SessionProfile>;
-            } catch (storageError) {
-              throw new Error(`Demo profile could not be restored: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
-            }
-            const demoNameByRole: Record<UserRole, string> = {
-              STUDENT: 'Sharath Swaroop',
-              RESEARCHER: 'Dr. Ananya Rao',
-              MENTOR: 'Prof. Sharma',
-              SPONSOR: 'MedScan Labs',
-              ADMIN: 'Gardenia Admin',
-            };
-            setCurrentUser({
-              id: `demo:${demoSession.email}`,
-              name: savedProfile.name ?? (demoSession.email.split('@')[0].toLowerCase() === 'demo'
-                ? demoNameByRole[demoSession.role]
-                : demoSession.email.split('@')[0]),
-              email: demoSession.email,
-              role: demoSession.role,
-              avatar: savedProfile.avatar ?? '',
-              institution: savedProfile.institution ?? '',
-              bio: savedProfile.bio ?? 'Demo preview account. Actions do not change protected database records.',
-            });
-            setError(null);
-            setLoading(false);
-            return;
+        const demoResponse = await fetch('/api/demo/session', { cache: 'no-store' });
+        const demoResult = await demoResponse.json();
+        if (!demoResponse.ok) throw new Error(demoResult.error ?? 'Unable to load the demo session.');
+        const demoSession = demoResult.session as { email: string; role: UserRole } | null;
+        if (active && demoSession) {
+          let savedProfile: Partial<SessionProfile> = {};
+          try {
+            const saved = window.localStorage.getItem(`gardenia-demo:profile:${demoSession.email}`);
+            if (saved) savedProfile = JSON.parse(saved) as Partial<SessionProfile>;
+          } catch (storageError) {
+            throw new Error(`Demo profile could not be restored: ${storageError instanceof Error ? storageError.message : 'browser storage is unavailable.'}`);
           }
+          const demoNameByRole: Record<UserRole, string> = {
+            STUDENT: 'Sharath Swaroop',
+            RESEARCHER: 'Dr. Ananya Rao',
+            MENTOR: 'Prof. Sharma',
+            SPONSOR: 'MedScan Labs',
+            ADMIN: 'Gardenia Admin',
+          };
+          setCurrentUser({
+            id: `demo:${demoSession.email}`,
+            name: savedProfile.name ?? (demoSession.email.split('@')[0].toLowerCase() === 'demo'
+              ? demoNameByRole[demoSession.role]
+              : demoSession.email.split('@')[0]),
+            email: demoSession.email,
+            role: demoSession.role,
+            avatar: savedProfile.avatar ?? '',
+            institution: savedProfile.institution ?? '',
+            bio: savedProfile.bio ?? 'Demo preview account. Actions do not change protected database records.',
+          });
+          setError(null);
+          setLoading(false);
+          return;
         }
 
         if (!active) return;

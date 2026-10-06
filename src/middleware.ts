@@ -19,7 +19,7 @@ const demoRoleSegments: Record<string, string> = {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const roleSegment = pathname.split('/')[1];
-  if (process.env.NODE_ENV === 'development' && roleSegment && roleBySegment[roleSegment]) {
+  if (roleSegment && roleBySegment[roleSegment]) {
     const demoValue = request.cookies.get('gardenia_demo_session')?.value;
     const separator = demoValue?.indexOf('|') ?? -1;
     if (demoValue && separator >= 0) {
